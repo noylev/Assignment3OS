@@ -7,6 +7,38 @@
 #include "x86.h"
 #include "elf.h"
 
+/*** added by Noy***/
+int strcmp(const char *p, const char *q);
+
+void
+resetProcFifo(int i){
+	proc->fifoQueue.first = 0;
+	proc->fifoQueue.last = 0;
+	proc->fifoQueue.count = 0;
+	proc->fifoQueue.elements[i] = 0;
+	proc->fifoQueue.va[i] = 0;	  
+}
+
+void resetProcLifo(int i){
+	proc->lifoStack.first = 0;
+	proc->lifoStack.count = 0;
+	proc->lifoStack.elements[i] = 0;
+	proc->lifoStack.va[i] = 0;
+}
+
+void
+resetAllFields(){
+	int i;
+	for (i = 0; i < MAX_TOTAL_PAGES; ++i) {
+                resetProcFifo(i);
+		resetProcLifo(i);
+		proc->pages.va[i] = 0;
+		proc->pages.count = 0;
+		proc->pages.location[i] = 0;
+		proc->pages.accesses[i] = 0;
+	}	
+}
+/*** added by Noy***/
 int
 exec(char *path, char **argv)
 {
@@ -28,7 +60,14 @@ exec(char *path, char **argv)
   }
   ilock(ip);
   pgdir = 0;
-
+/*----------------------added by noy*/
+  proc->numOfpageFaults = 0;
+  proc->numOfPInDisk = 0;
+  proc->totalPagesInDisk = 0;
+  resetAllFields();
+  removeSwapFile(proc);
+  /*--------------------added by noy*/
+  
   // Check ELF header
   if(readi(ip, (char*)&elf, 0, sizeof(elf)) != sizeof(elf))
     goto bad;
@@ -99,6 +138,9 @@ exec(char *path, char **argv)
   curproc->sz = sz;
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
+  if(strcmp(proc->name, "init") && strcmp(proc->name, "sh")) {
+       createSwapFile(proc);
+	}
   switchuvm(curproc);
   freevm(oldpgdir);
   return 0;
