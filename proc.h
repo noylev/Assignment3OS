@@ -34,6 +34,34 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+
+// Process memory is laid out contiguously, low addresses first:
+//   text
+//   original data and bss
+//   fixed-size stack
+//   expandable heap
+
+
+
+/* ====== task1 pages stuff =======  */
+
+typedef enum  {BLANK, PHYSICAL, DISK} memory_location;
+
+struct pages {
+
+    int count;
+    uint va[MAX_TOTAL_PAGES];
+    memory_location location[MAX_TOTAL_PAGES];
+    int accesses[MAX_TOTAL_PAGES];
+};
+
+struct diskPage{
+    
+    char elements;
+    uint va;
+};
+
+
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)
@@ -52,10 +80,16 @@ struct proc {
 
   //Swap file. must initiate with create swap file
   struct file *swapFile;      //page file
+  
+  // === Task 1 pages stuff. ===
+  // Proc's memory pages.
+  struct pages pages;
+  // Pages on the disk
+  struct diskPage diskPages[MAX_TOTAL_PAGES - MAX_PSYC_PAGES];
+  // number of page faults
+  uint page_faults;            
+  // number of pages in the disk
+  uint pages_on_disk;          
+  // total number of paged out pages
+  uint total_pages_on_disk;         
 };
-
-// Process memory is laid out contiguously, low addresses first:
-//   text
-//   original data and bss
-//   fixed-size stack
-//   expandable heap

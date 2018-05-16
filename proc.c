@@ -73,45 +73,52 @@ myproc(void) {
 static struct proc*
 allocproc(void)
 {
-  struct proc *p;
-  char *sp;
+    struct proc *p;
+    char *sp;
 
-  acquire(&ptable.lock);
+    acquire(&ptable.lock);
 
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == UNUSED)
-      goto found;
+        goto found;
 
-  release(&ptable.lock);
-  return 0;
+    release(&ptable.lock);
+    return 0;
 
-found:
-  p->state = EMBRYO;
-  p->pid = nextpid++;
+    found:
+    p->state = EMBRYO;
+    p->pid = nextpid++;
 
-  release(&ptable.lock);
+    release(&ptable.lock);
 
-  // Allocate kernel stack.
-  if((p->kstack = kalloc()) == 0){
+    // Allocate kernel stack.
+    if((p->kstack = kalloc()) == 0){
     p->state = UNUSED;
     return 0;
-  }
-  sp = p->kstack + KSTACKSIZE;
+    }
+    // Task 1.
+    pagesCounter++;
+    sp = p->kstack + KSTACKSIZE;
 
-  // Leave room for trap frame.
-  sp -= sizeof *p->tf;
-  p->tf = (struct trapframe*)sp;
+    // Leave room for trap frame.
+    sp -= sizeof *p->tf;
+    p->tf = (struct trapframe*)sp;
 
-  // Set up new context to start executing at forkret,
-  // which returns to trapret.
-  sp -= 4;
-  *(uint*)sp = (uint)trapret;
+    // Set up new context to start executing at forkret,
+    // which returns to trapret.
+    sp -= 4;
+    *(uint*)sp = (uint)trapret;
 
-  sp -= sizeof *p->context;
-  p->context = (struct context*)sp;
-  memset(p->context, 0, sizeof *p->context);
-  p->context->eip = (uint)forkret;
-
+    sp -= sizeof *p->context;
+    p->context = (struct context*)sp;
+    memset(p->context, 0, sizeof *p->context);
+    p->context->eip = (uint)forkret;
+  
+    // Task 1 - set initial values.
+    p->page_faults = 0;
+    p->pages_on_disk = 0;
+    p->total_pages_on_disk = 0;
+    
   return p;
 }
 
