@@ -65,6 +65,19 @@ myproc(void) {
   return p;
 }
 
+
+// TASK 1 - fork process' information
+void
+allocFork(struct proc* p){
+    int i;
+    for (i = 0; i < MAX_TOTAL_PAGES; ++i) {
+            p->pages.va[i] = proc->pages.va[i];
+            p->pages.location[i] = proc->pages.location[i];
+            p->pages.count = proc->pages.count;
+    }
+}
+
+
 //PAGEBREAK: 32
 // Look in the process table for an UNUSED proc.
 // If found, change state to EMBRYO and initialize
@@ -173,7 +186,7 @@ growproc(int n)
     if((sz = allocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
   } else if(n < 0){
-    if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
+    if((sz = NewDeallocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
   }
   curproc->sz = sz;
@@ -196,16 +209,22 @@ fork(void)
     return -1;
   }
 
-  // Copy process state from proc.
-  if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
-    kfree(np->kstack);
-    np->kstack = 0;
-    np->state = UNUSED;
-    return -1;
-  }
-  np->sz = curproc->sz;
-  np->parent = curproc;
-  *np->tf = *curproc->tf;
+    // Copy process state from proc.
+    // task 1- page information
+    np->pages_on_disk = proc->pages_on_disk;
+    np->total_pages_on_disk = proc->total_pages_on_disk;
+    // copy data from original process
+    allocFork(np);
+    if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
+        kfree(np->kstack);
+        np->kstack = 0;
+        np->state = UNUSED;
+        pagesCounter--;
+        return -1;
+    }
+    np->sz = curproc->sz;
+    np->parent = curproc;
+    *np->tf = *curproc->tf;
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
@@ -280,7 +299,7 @@ int
 wait(void)
 {
   struct proc *p;
-  int havekids, pid;
+  int havekids, pid, pageIndex;
   struct proc *curproc = myproc();
   
   acquire(&ptable.lock);
@@ -295,6 +314,7 @@ wait(void)
         // Found one.
         pid = p->pid;
         kfree(p->kstack);
+        pagesCounter--;
         p->kstack = 0;
         freevm(p->pgdir);
         p->pid = 0;
@@ -302,6 +322,9 @@ wait(void)
         p->name[0] = 0;
         p->killed = 0;
         p->state = UNUSED;
+        for (pageIndex = 0; pageIndex < MAX_TOTAL_PAGES - MAX_PSYC_PAGES; pageIndex++) {
+                p->diskPages[pageIndex].elements = 0;
+        }
         release(&ptable.lock);
         return pid;
       }
@@ -538,4 +561,211 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+
+int
+getRamPages() {
+    int i;
+    int pagesInRam = 0;
+    for (i = 0; i < proc->pages.count; ++i){
+        if(proc->pages.location[i] == RAM)
+            pagesInRam++;
+    }
+    return pagesInRam;
+}
+
+int
+getDiskPagesCount(){
+    int i;
+    int pagesInDisk = 0;
+    for (i = 0; i < proc->pages.count; ++i){
+        if (proc->pages.location[i] == DISK)
+            pagesInDisk++;
+    }
+    return pagesInDisk;
+}
+
+int
+getOffsetNotSet(uint va){
+    int i;
+    int ans = -1;
+    for(i = 0; i <  MAX_TOTAL_PAGES - MAX_PSYC_PAGES; i++) {
+        if((proc->diskPages[i].elements != 0) && proc->diskPages[i].va == va) { 
+            proc->diskPages[i].elements = 0; 
+            proc->numOfPInDisk--;
+            ans = PGSIZE * i;
+            return ans;
+        }
+    }
+    panic("page in disk not found");
+    return ans;
+}
+
+int
+getOffsetInsert(uint va) {
+    int i;
+    for (i = 0; i <  MAX_TOTAL_PAGES - MAX_PSYC_PAGES; i++) {
+        if(!proc->diskPages[i].elements) {
+            proc->diskPages[i].elements = 1;
+            proc->diskPages[i].va = va;
+            proc->numOfPInDisk++;
+            proc->totalPagesInDisk++;
+            return i * PGSIZE;
+        }
+    }
+    panic("no available page to swap");
+    return -1;
+}
+
+int
+addToPages(uint va, struct proc* p) {
+    int i,size;
+    for (i = 0; i <  MAX_TOTAL_PAGES - MAX_PSYC_PAGES; i++) {
+        if(!p->diskPages[i].elements) {
+            p->diskPages[i].elements = 1;
+            p->diskPages[i].va = va;
+            p->numOfPInDisk++;
+            p->totalPagesInDisk++;
+            size = i * PGSIZE;
+            return size;
+        }
+    }
+    panic("no pages to swap");
+    return -1;
+}
+
+int findPage(uint va){
+    int exists = 0;
+    int i;
+    for(i = 0; i < proc->pages.count; i++) {
+        if(proc->pages.va[i] == va) { 
+            exists = 1;
+            break;
+        }
+    }
+    return exists;
+}
+
+int findPageLocation(uint va){
+    int i;
+    for(i = 0; i < proc->pages.count; i++) {
+        if(proc->pages.va[i] == va) { 
+            break;
+        }
+    }
+    return i;
+}
+
+void
+addPage(uint va , int type){
+    int exists = findPage(va);
+    int index = findPageLocation(va);
+    if(!exists) {
+        proc->pages.count++;
+        proc->pages.va[index] = va;
+    }
+    switch (type){
+    case 1:
+        proc->pages.location[index] = RAM;
+        break;
+    case 2:
+        proc->pages.location[index] = DISK;
+    default:
+        proc->pages.location[index] = BLANK;
+    }
+}
+
+int
+getFirstElement(int head){
+    while(proc->lifoStack.elements[head] == 1) { 
+        head = (head + 1) % MAX_PSYC_PAGES;
+    }
+    return head;
+}
+
+void
+removePage(uint va) {
+    int index;
+    int exists = findPage(va);
+    if(!exists) panic("cannot remove page");
+    index = findPageLocation(va);
+    proc->pages.count--;
+    proc->pages.va[index] = 0;
+    proc->pages.location[index] = BLANK;
+    proc->pages.accesses[index] = 0;
+}
+
+void
+removeElement(uint va, int type){
+    int i;
+    switch(type){
+    case 1:
+        for(i = 0; i < MAX_PSYC_PAGES; i++) {
+            
+            if(proc->lifoStack.va[i] == va) {
+                updateLifo(i, va, 0);
+                if(i == proc->lifoStack.first) {
+                    proc->lifoStack.first = (proc->lifoStack.first - 1) % MAX_PSYC_PAGES;
+                }
+                return;
+            }
+        }
+        break;
+
+    case 2:
+        for(i = 0; i < MAX_PSYC_PAGES; i++) {
+            if(proc->fifoQueue.va[i] == va) { 
+                updateFifo(i, va, 0);
+                if(i == proc->fifoQueue.first) {
+                    proc->fifoQueue.first = (proc->fifoQueue.first + 1) % MAX_PSYC_PAGES;
+                }
+                if(i == proc->fifoQueue.last) {
+                    proc->fifoQueue.last = (proc->fifoQueue.last - 1) % MAX_PSYC_PAGES;
+                }
+                return;
+            }
+        }
+        break;
+
+    default: 
+        panic("no element to remove");
+    }  
+}
+
+void
+updateLap() {
+    int i;
+    pte_t* page;
+    for(i = 0; i < MAX_TOTAL_PAGES; i++) {
+        if(proc->pages.location[i] == RAM) {
+            page = walkpgdir(proc->pgdir, (void*) proc->pages.va[i], 0);
+            if(PTE_FLAGS(*page) & PTE_A) {  
+                proc->pages.accesses[i]++;   
+                *page &= ~PTE_A;
+            }
+        }
+    }
+}
+
+uint
+getLap() {
+    int i;
+    int min_access = -1;
+    int min_va = 0;
+    for(i = 0; i < MAX_TOTAL_PAGES; i++) {
+        if(proc->pages.location[i] == RAM) {
+            min_access = proc->pages.accesses[i];
+            min_va = proc->pages.va[i];
+            break;
+        }   
+    }
+    if(min_access == -1) panic("no pages in ram");
+    for(; i < MAX_TOTAL_PAGES; i++) {
+        if(proc->pages.location[i] == RAM && proc->pages.accesses[i] < min_access) {
+            min_access = proc->pages.accesses[i];
+            min_va = proc->pages.va[i];
+        }
+    }
+    return min_va;
 }

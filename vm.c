@@ -278,6 +278,40 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   return newsz;
 }
 
+
+// TASK 1 - new allocuvm
+int
+NewDeallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
+{
+  pte_t *pte;
+  uint a, pa;
+
+  if(newsz >= oldsz)
+    return oldsz;
+
+  a = PGROUNDUP(newsz);
+  for(; a  < oldsz; a += PGSIZE){
+    pte = walkpgdir(pgdir, (char*)a, 0);
+    if(!pte)
+      a += (NPTENTRIES - 1) * PGSIZE;
+     else if((*pte & PTE_P) != 0){   
+        pa = PTE_ADDR(*pte);
+        if(pa == 0)
+          panic("kfree");
+        char *v = p2v(pa);
+        kfree(v);
+        pagesCounter--;
+        *pte = 0;
+    }
+    else{
+        getOffsetNotSet(a);
+    } 
+    removePage(a); 
+    
+  return newsz;
+}
+
+
 // Free a page table and all the physical memory pages
 // in the user part.
 void
