@@ -9,6 +9,11 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+#define TRUE 1   //added by noy
+#define FALSE 0 //added by noy
+
+typedef uint pte_t;//added by noy
+
 
 // bio.c
 void            binit(void);
@@ -23,6 +28,7 @@ void            consoleintr(int(*)(void));
 void            panic(char*) __attribute__((noreturn));
 
 // exec.c
+void            resetAllFields(void); //added by noy
 int             exec(char*, char**);
 
 // file.c
@@ -62,6 +68,8 @@ void            ideinit(void);
 void            ideintr(void);
 void            iderw(struct buf*);
 
+int 		pagesCounter; //added by noy  
+int 		totalSystemPages; //added by noy
 // ioapic.c
 void            ioapicenable(int irq, int cpu);
 extern uchar    ioapicid;
@@ -124,6 +132,26 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+/***added by Noy***/
+int             getRamPages(void);
+int             get_pages_in_disk_count(void);
+int             getOffsetNotSet(uint);
+int             getOffsetInsert(uint);
+int             addToPages(uint, struct proc*);
+void            addPage(uint, int);
+void            removePage(uint);
+void            pushLifo(uint);
+uint            popLifo(void);
+void            enqueueScfifo(uint);
+uint            dequeueScfifo(void);
+void            updateLap(void);
+uint            getLap(void);
+void		allocFork(struct proc*);
+int		getFirstElement(int);
+int		findPage(uint);
+int		findPageLocation(uint);
+void	        removeElement(uint, int);
+
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -179,6 +207,8 @@ void            uartintr(void);
 void            uartputc(int);
 
 // vm.c
+int             strcmp(); //added by Noy
+int             SecDeallocuvm(pde_t*, uint, uint); //added by Noy
 void            seginit(void);
 int             NewDeallocuvm(pde_t*, uint, uint);
 void            kvmalloc(void);
@@ -194,6 +224,9 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+pte_t*          walkpgdir(pde_t*, const void*, int);
+uint            vaBySelection(void); //added by Noy
+void            getPageBySelection(void); //added by Noy
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
