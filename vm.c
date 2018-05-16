@@ -7,6 +7,18 @@
 #include "proc.h"
 #include "elf.h"
 
+
+int strcmp(const char *p, const char *q){ /*addded by noy ***************/
+  int answer;
+  while(*p && *p == *q){
+    p++;
+    q++;
+  }
+  answer = (uchar)*p - (uchar)*q;
+  return answer;
+}/*addded by noy ***************/
+
+
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
 
@@ -32,9 +44,7 @@ seginit(void)
 // Return the address of the PTE in page table pgdir
 // that corresponds to virtual address va.  If alloc!=0,
 // create any required page table pages.
-static pte_t *
-walkpgdir(pde_t *pgdir, const void *va, int alloc)
-{
+static pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc){ //noy : maybe to remove the static and be-el
   pde_t *pde;
   pte_t *pgtab;
 
@@ -44,6 +54,8 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
   } else {
     if(!alloc || (pgtab = (pte_t*)kalloc()) == 0)
       return 0;
+    pagesCounter++; //added by noy
+    
     // Make sure all those PTE_P bits are zero.
     memset(pgtab, 0, PGSIZE);
     // The permissions here are overly generous, but they can
@@ -123,6 +135,7 @@ setupkvm(void)
 
   if((pgdir = (pde_t*)kalloc()) == 0)
     return 0;
+  pagesCounter++; // added by noy
   memset(pgdir, 0, PGSIZE);
   if (P2V(PHYSTOP) > (void*)DEVSPACE)
     panic("PHYSTOP too high");
@@ -187,6 +200,7 @@ inituvm(pde_t *pgdir, char *init, uint sz)
   if(sz >= PGSIZE)
     panic("inituvm: more than a page");
   mem = kalloc();
+  pagesCounter++; // added by noy
   memset(mem, 0, PGSIZE);
   mappages(pgdir, 0, PGSIZE, V2P(mem), PTE_W|PTE_U);
   memmove(mem, init, sz);
@@ -231,12 +245,16 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
   a = PGROUNDUP(oldsz);
   for(; a < newsz; a += PGSIZE){
+    if(getRamPages() >= MAX_PSYC_PAGES && SELECTION != NONE ) { //added by noy
+      getPageBySelection();
+    }
     mem = kalloc();
     if(mem == 0){
       cprintf("allocuvm out of memory\n");
       deallocuvm(pgdir, newsz, oldsz);
       return 0;
     }
+    pagesCounter++; //added by noy
     memset(mem, 0, PGSIZE);
     if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){
       cprintf("allocuvm out of memory (2)\n");
