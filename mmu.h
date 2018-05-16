@@ -48,8 +48,8 @@
 
 // cpu->gdt[NSEGS] holds the above segments.
 #define NSEGS     6
-#define MAX_PSYC_PAGES  15     //task 1.2
-#define MAX_TOTAL_PAGES 30   //task 1.2
+#define MAX_PSYC_PAGES  16     //task 1.2
+#define MAX_TOTAL_PAGES 32   //task 1.2
 #ifndef __ASSEMBLER__
 // Segment Descriptor
 struct segdesc {
