@@ -210,6 +210,7 @@ void            uartputc(int);
 int             strcmp(); //added by Noy
 int             SecDeallocuvm(pde_t*, uint, uint); //added by Noy
 void            seginit(void);
+int             NewDeallocuvm(pde_t*, uint, uint);
 void            kvmalloc(void);
 pde_t*          setupkvm(void);
 char*           uva2ka(pde_t*, char*);
