@@ -64,7 +64,7 @@ exec(char *path, char **argv)
   curproc->page_faults = 0;
   curproc->pages_on_disk = 0;
   curproc->total_pages_on_disk = 0;
-  resetAllFields();
+  //resetAllFields();
   removeSwapFile(curproc);
   /*--------------------added by noy*/
   

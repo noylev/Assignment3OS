@@ -86,9 +86,9 @@ trap(struct trapframe *tf)
             if(!(PTE_FLAGS(*missing_page) & PTE_PG)) {
                 panic("segmentation fault");
             }
-            if(get_physical_pages() >= MAX_PSYC_PAGES) {
-                getPageBySelection();
-            }
+            //if(get_physical_pages() >= MAX_PSYC_PAGES) {
+             //   getPageBySelection();
+           // }
       	int offset = getOffsetNotSet(cr2);
       	char* page_mem;
       	page_mem = kalloc();

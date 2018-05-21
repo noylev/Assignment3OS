@@ -44,7 +44,7 @@ seginit(void)
 // Return the address of the PTE in page table pgdir
 // that corresponds to virtual address va.  If alloc!=0,
 // create any required page table pages.
-static pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc){ //noy : maybe to remove the static and be-el
+pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc){ //noy : I removed the static in the signature
   pde_t *pde;
   pte_t *pgtab;
 
@@ -245,9 +245,9 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
   a = PGROUNDUP(oldsz);
   for(; a < newsz; a += PGSIZE){
-    if(get_physical_pages() >= MAX_PSYC_PAGES && SELECTION != NONE ) { //added by noy
+    /*if(get_physical_pages() >= MAX_PSYC_PAGES && SELECTION != NONE ) { //added by noy
       getPageBySelection();
-    }
+    }*/
     mem = kalloc();
     if(mem == 0){
       cprintf("allocuvm out of memory\n");
@@ -316,7 +316,7 @@ NewDeallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         pa = PTE_ADDR(*pte);
         if(pa == 0)
           panic("kfree");
-        char *v = p2v(pa);
+        char *v = P2V(pa);
         kfree(v);
         pagesCounter--;
         *pte = 0;
@@ -324,8 +324,8 @@ NewDeallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     else{
         getOffsetNotSet(a);
     } 
-    removePage(a); 
-    
+    removePage(a);
+  }    
   return newsz;
 }
 
