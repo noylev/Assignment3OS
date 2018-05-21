@@ -245,7 +245,7 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
   a = PGROUNDUP(oldsz);
   for(; a < newsz; a += PGSIZE){
-    if(getRamPages() >= MAX_PSYC_PAGES && SELECTION != NONE ) { //added by noy
+    if(get_physical_pages() >= MAX_PSYC_PAGES && SELECTION != NONE ) { //added by noy
       getPageBySelection();
     }
     mem = kalloc();

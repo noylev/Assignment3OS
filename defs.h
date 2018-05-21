@@ -133,7 +133,7 @@ int             wait(void);
 void            wakeup(void*);
 void            yield(void);
 /***added by Noy***/
-int             getRamPages(void);
+int             get_physical_pages(void);
 int             get_pages_in_disk_count(void);
 int             getOffsetNotSet(uint);
 int             getOffsetInsert(uint);

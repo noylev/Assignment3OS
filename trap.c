@@ -36,6 +36,7 @@ idtinit(void)
 void
 trap(struct trapframe *tf)
 {
+  struct proc *curproc = myproc();
   if(tf->trapno == T_SYSCALL){
     if(myproc()->killed)
       exit();
@@ -78,38 +79,35 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT:/*added by noy*****************************************/
-    if(proc){
-	proc->numOfpageFaults++;
-	uint cr2 = (uint) (PGROUNDDOWN(rcr2()));
-	pte_t* missing_page = walkpgdir(proc->pgdir, (void*) cr2, 0);
-		
-        if(!(PTE_FLAGS(*missing_page) & PTE_PG)) { 
-            panic("segmentation fault");
-        }
-
-        if(getRamPages() >= MAX_PSYC_PAGES) {
-            getPageBySelection();
-        }
-
-	int offset = getOffsetNotSet(cr2);
-	char* page_mem;
-	page_mem = kalloc(); 
-	if(page_mem == 0) panic("could not allocate memory for page");
-	pagesCounter++;
-        if(SELECTION == LIFO) pushLifo(cr2);
-        else if(SELECTION == SCFIFO) enqueueScfifo(cr2);
+    if(curproc) {
+    	curproc->page_faults++;
+    	uint cr2 = (uint) (PGROUNDDOWN(rcr2()));
+    	pte_t* missing_page = walkpgdir(curproc->pgdir, (void*) cr2, 0);
+            if(!(PTE_FLAGS(*missing_page) & PTE_PG)) {
+                panic("segmentation fault");
+            }
+            if(get_physical_pages() >= MAX_PSYC_PAGES) {
+                getPageBySelection();
+            }
+      	int offset = getOffsetNotSet(cr2);
+      	char* page_mem;
+      	page_mem = kalloc();
+      	if(page_mem == 0) panic("could not allocate memory for page");
+      	pagesCounter++;
+        // if(SELECTION == LIFO) pushLifo(cr2);
+        // else if(SELECTION == SCFIFO) enqueueScfifo(cr2);
         memset(page_mem, 0, PGSIZE);
-        if(readFromSwapFile(proc, page_mem, offset, PGSIZE) == -1) 
-	panic("didnt read from swap file - trap.c");
+        if(readFromSwapFile(curproc, page_mem, offset, PGSIZE) == -1)
+        panic("didnt read from swap file - trap.c");
         uint flags = PTE_FLAGS(*missing_page);
-        *missing_page = v2p(page_mem) | flags | PTE_P | PTE_U | PTE_W;
+        *missing_page = V2P(page_mem) | flags | PTE_P | PTE_U | PTE_W;
         *missing_page &= ~PTE_PG;
         addPage(cr2,1);
-        }
+      }
     break;
         /*added by noy*****************************************/
-        
-        
+
+
   //PAGEBREAK: 13
   default:
     if(myproc() == 0 || (tf->cs&3) == 0){
