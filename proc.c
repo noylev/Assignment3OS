@@ -38,10 +38,10 @@ struct cpu*
 mycpu(void)
 {
   int apicid, i;
-  
+
   if(readeflags()&FL_IF)
     panic("mycpu called with interrupts enabled\n");
-  
+
   apicid = lapicid();
   // APIC IDs are not guaranteed to be contiguous. Maybe we should have
   // a reverse map, or reserve a register to store &cpus[i].
@@ -64,19 +64,6 @@ myproc(void) {
   popcli();
   return p;
 }
-
-
-// TASK 1 - fork process' information
-void
-allocFork(struct proc* p){
-    int i;
-    for (i = 0; i < MAX_TOTAL_PAGES; ++i) {
-            p->pages.va[i] = proc->pages.va[i];
-            p->pages.location[i] = proc->pages.location[i];
-            p->pages.count = proc->pages.count;
-    }
-}
-
 
 //PAGEBREAK: 32
 // Look in the process table for an UNUSED proc.
@@ -126,12 +113,12 @@ allocproc(void)
     p->context = (struct context*)sp;
     memset(p->context, 0, sizeof *p->context);
     p->context->eip = (uint)forkret;
-  
+
     // Task 1 - set initial values.
     p->page_faults = 0;
     p->pages_on_disk = 0;
     p->total_pages_on_disk = 0;
-    
+
   return p;
 }
 
@@ -144,7 +131,7 @@ userinit(void)
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
   p = allocproc();
-  
+
   initproc = p;
   if((p->pgdir = setupkvm()) == 0)
     panic("userinit: out of memory?");
@@ -211,10 +198,15 @@ fork(void)
 
     // Copy process state from proc.
     // task 1- page information
-    np->pages_on_disk = proc->pages_on_disk;
-    np->total_pages_on_disk = proc->total_pages_on_disk;
+    np->pages_on_disk = curproc->pages_on_disk;
+    np->total_pages_on_disk = curproc->total_pages_on_disk;
     // copy data from original process
-    allocFork(np);
+    ;
+    for (int copyPageIndex = 0; copyPageIndex < MAX_TOTAL_PAGES; ++copyPageIndex) {
+            np->pages.va[copyPageIndex] = curproc->pages.va[copyPageIndex];
+            np->pages.location[copyPageIndex] = curproc->pages.location[copyPageIndex];
+            np->pages.count = curproc->pages.count;
+    }
     if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
         kfree(np->kstack);
         np->kstack = 0;
@@ -301,7 +293,7 @@ wait(void)
   struct proc *p;
   int havekids, pid, pageIndex;
   struct proc *curproc = myproc();
-  
+
   acquire(&ptable.lock);
   for(;;){
     // Scan through table looking for exited children.
@@ -355,7 +347,7 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
-  
+
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -448,7 +440,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
+
   if(p == 0)
     panic("sleep");
 
@@ -566,10 +558,11 @@ procdump(void)
 
 int
 getRamPages() {
+    struct proc *curproc = myproc();
     int i;
     int pagesInRam = 0;
-    for (i = 0; i < proc->pages.count; ++i){
-        if(proc->pages.location[i] == RAM)
+    for (i = 0; i < curproc->pages.count; ++i){
+        if(curproc->pages.location[i] == PHYSICAL)
             pagesInRam++;
     }
     return pagesInRam;
@@ -577,10 +570,11 @@ getRamPages() {
 
 int
 getDiskPagesCount(){
+    struct proc *curproc = myproc();
     int i;
     int pagesInDisk = 0;
-    for (i = 0; i < proc->pages.count; ++i){
-        if (proc->pages.location[i] == DISK)
+    for (i = 0; i < curproc->pages.count; ++i){
+        if (curproc->pages.location[i] == DISK)
             pagesInDisk++;
     }
     return pagesInDisk;
@@ -588,12 +582,13 @@ getDiskPagesCount(){
 
 int
 getOffsetNotSet(uint va){
+    struct proc *curproc = myproc();
     int i;
     int ans = -1;
     for(i = 0; i <  MAX_TOTAL_PAGES - MAX_PSYC_PAGES; i++) {
-        if((proc->diskPages[i].elements != 0) && proc->diskPages[i].va == va) { 
-            proc->diskPages[i].elements = 0; 
-            proc->numOfPInDisk--;
+        if((curproc->diskPages[i].elements != 0) && curproc->diskPages[i].va == va) {
+            curproc->diskPages[i].elements = 0;
+            curproc->pages_on_disk--;
             ans = PGSIZE * i;
             return ans;
         }
@@ -604,13 +599,14 @@ getOffsetNotSet(uint va){
 
 int
 getOffsetInsert(uint va) {
+    struct proc *curproc = myproc();
     int i;
     for (i = 0; i <  MAX_TOTAL_PAGES - MAX_PSYC_PAGES; i++) {
-        if(!proc->diskPages[i].elements) {
-            proc->diskPages[i].elements = 1;
-            proc->diskPages[i].va = va;
-            proc->numOfPInDisk++;
-            proc->totalPagesInDisk++;
+        if(!curproc->diskPages[i].elements) {
+            curproc->diskPages[i].elements = 1;
+            curproc->diskPages[i].va = va;
+            curproc->pages_on_disk++;
+            curproc->total_pages_on_disk++;
             return i * PGSIZE;
         }
     }
@@ -625,8 +621,8 @@ addToPages(uint va, struct proc* p) {
         if(!p->diskPages[i].elements) {
             p->diskPages[i].elements = 1;
             p->diskPages[i].va = va;
-            p->numOfPInDisk++;
-            p->totalPagesInDisk++;
+            p->pages_on_disk++;
+            p->total_pages_on_disk++;
             size = i * PGSIZE;
             return size;
         }
@@ -639,7 +635,7 @@ int findPage(uint va){
     int exists = 0;
     int i;
     for(i = 0; i < proc->pages.count; i++) {
-        if(proc->pages.va[i] == va) { 
+        if(proc->pages.va[i] == va) {
             exists = 1;
             break;
         }
@@ -650,7 +646,7 @@ int findPage(uint va){
 int findPageLocation(uint va){
     int i;
     for(i = 0; i < proc->pages.count; i++) {
-        if(proc->pages.va[i] == va) { 
+        if(proc->pages.va[i] == va) {
             break;
         }
     }
@@ -667,7 +663,7 @@ addPage(uint va , int type){
     }
     switch (type){
     case 1:
-        proc->pages.location[index] = RAM;
+        proc->pages.location[index] = PHYSICAL;
         break;
     case 2:
         proc->pages.location[index] = DISK;
@@ -678,7 +674,7 @@ addPage(uint va , int type){
 
 int
 getFirstElement(int head){
-    while(proc->lifoStack.elements[head] == 1) { 
+    while(proc->lifoStack.elements[head] == 1) {
         head = (head + 1) % MAX_PSYC_PAGES;
     }
     return head;
@@ -702,7 +698,7 @@ removeElement(uint va, int type){
     switch(type){
     case 1:
         for(i = 0; i < MAX_PSYC_PAGES; i++) {
-            
+
             if(proc->lifoStack.va[i] == va) {
                 updateLifo(i, va, 0);
                 if(i == proc->lifoStack.first) {
@@ -715,7 +711,7 @@ removeElement(uint va, int type){
 
     case 2:
         for(i = 0; i < MAX_PSYC_PAGES; i++) {
-            if(proc->fifoQueue.va[i] == va) { 
+            if(proc->fifoQueue.va[i] == va) {
                 updateFifo(i, va, 0);
                 if(i == proc->fifoQueue.first) {
                     proc->fifoQueue.first = (proc->fifoQueue.first + 1) % MAX_PSYC_PAGES;
@@ -728,9 +724,9 @@ removeElement(uint va, int type){
         }
         break;
 
-    default: 
+    default:
         panic("no element to remove");
-    }  
+    }
 }
 
 void
@@ -738,10 +734,10 @@ updateLap() {
     int i;
     pte_t* page;
     for(i = 0; i < MAX_TOTAL_PAGES; i++) {
-        if(proc->pages.location[i] == RAM) {
+        if(proc->pages.location[i] == PHYSICAL) {
             page = walkpgdir(proc->pgdir, (void*) proc->pages.va[i], 0);
-            if(PTE_FLAGS(*page) & PTE_A) {  
-                proc->pages.accesses[i]++;   
+            if(PTE_FLAGS(*page) & PTE_A) {
+                proc->pages.accesses[i]++;
                 *page &= ~PTE_A;
             }
         }
@@ -754,15 +750,15 @@ getLap() {
     int min_access = -1;
     int min_va = 0;
     for(i = 0; i < MAX_TOTAL_PAGES; i++) {
-        if(proc->pages.location[i] == RAM) {
+        if(proc->pages.location[i] == PHYSICAL) {
             min_access = proc->pages.accesses[i];
             min_va = proc->pages.va[i];
             break;
-        }   
+        }
     }
     if(min_access == -1) panic("no pages in ram");
     for(; i < MAX_TOTAL_PAGES; i++) {
-        if(proc->pages.location[i] == RAM && proc->pages.accesses[i] < min_access) {
+        if(proc->pages.location[i] == PHYSICAL && proc->pages.accesses[i] < min_access) {
             min_access = proc->pages.accesses[i];
             min_va = proc->pages.va[i];
         }

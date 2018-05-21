@@ -691,7 +691,7 @@ keyboard_mapping: enabled=0, map=
 
 #=======================================================================
 # CMOSIMAGE:
-# This defines image file that can be loaded into the CMOS RAM at startup.
+# This defines image file that can be loaded into the CMOS PHYSICAL at startup.
 # The rtc_init parameter controls whether initialize the RTC with values stored
 # in the image. By default the time0 argument given to the clock option is used.
 # With 'rtc_init=image' the image is the source for the initial time.
