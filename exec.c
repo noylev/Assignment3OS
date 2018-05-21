@@ -7,37 +7,37 @@
 #include "x86.h"
 #include "elf.h"
 
-/*** added by Noy***/
+/*** added by Noy***
 int strcmp(const char *p, const char *q);
 
 void
-resetProcFifo(int i){
-	proc->fifoQueue.first = 0;
-	proc->fifoQueue.last = 0;
-	proc->fifoQueue.count = 0;
-	proc->fifoQueue.elements[i] = 0;
-	proc->fifoQueue.va[i] = 0;	  
+resetcurprocFifo(int i){
+	curproc->fifoQueue.first = 0;
+	curproc->fifoQueue.last = 0;
+	curproc->fifoQueue.count = 0;
+	curproc->fifoQueue.elements[i] = 0;
+	curproc->fifoQueue.va[i] = 0;	  
 }
 
-void resetProcLifo(int i){
-	proc->lifoStack.first = 0;
-	proc->lifoStack.count = 0;
-	proc->lifoStack.elements[i] = 0;
-	proc->lifoStack.va[i] = 0;
+void resetcurprocLifo(int i){
+	curproc->lifoStack.first = 0;
+	curproc->lifoStack.count = 0;
+	curproc->lifoStack.elements[i] = 0;
+	curproc->lifoStack.va[i] = 0;
 }
 
 void
 resetAllFields(){
 	int i;
 	for (i = 0; i < MAX_TOTAL_PAGES; ++i) {
-                resetProcFifo(i);
-		resetProcLifo(i);
-		proc->pages.va[i] = 0;
-		proc->pages.count = 0;
-		proc->pages.location[i] = 0;
-		proc->pages.accesses[i] = 0;
+                //resetcurprocFifo(i);
+		//resetcurprocLifo(i);
+		curproc->pages.va[i] = 0;
+		curproc->pages.count = 0;
+		curproc->pages.location[i] = 0;
+		curproc->pages.accesses[i] = 0;
 	}	
-}
+}*/
 /*** added by Noy***/
 int
 exec(char *path, char **argv)
@@ -61,11 +61,11 @@ exec(char *path, char **argv)
   ilock(ip);
   pgdir = 0;
 /*----------------------added by noy*/
-  proc->numOfpageFaults = 0;
-  proc->numOfPInDisk = 0;
-  proc->totalPagesInDisk = 0;
+  curproc->page_faults = 0;
+  curproc->pages_on_disk = 0;
+  curproc->total_pages_on_disk = 0;
   resetAllFields();
-  removeSwapFile(proc);
+  removeSwapFile(curproc);
   /*--------------------added by noy*/
   
   // Check ELF header
@@ -138,8 +138,8 @@ exec(char *path, char **argv)
   curproc->sz = sz;
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
-  if(strcmp(proc->name, "init") && strcmp(proc->name, "sh")) {
-       createSwapFile(proc);
+  if(strcmp(curproc->name, "init") && strcmp(curproc->name, "sh")) {
+       createSwapFile(curproc);
 	}
   switchuvm(curproc);
   freevm(oldpgdir);
