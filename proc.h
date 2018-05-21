@@ -56,11 +56,22 @@ struct pages {
 };
 
 struct diskPage{
-    
+
     char elements;
-    uint va;
+    uint virtual_address;
 };
 
+#if SELECTION==SCFIFO
+
+struct fifoQueue {
+	char elements[MAX_PSYC_PAGES];
+	uint virtual_address[MAX_PSYC_PAGES];
+	int first;
+	int last;
+	int count;
+};
+
+#endif
 
 // Per-process state
 struct proc {
@@ -80,16 +91,20 @@ struct proc {
 
   //Swap file. must initiate with create swap file
   struct file *swapFile;      //page file
-  
+
   // === Task 1 pages stuff. ===
   // Proc's memory pages.
   struct pages pages;
   // Pages on the disk
   struct diskPage diskPages[MAX_TOTAL_PAGES - MAX_PSYC_PAGES];
   // number of page faults
-  uint page_faults;            
+  uint page_faults;
   // number of pages in the disk
-  uint pages_on_disk;          
+  uint pages_on_disk;
   // total number of paged out pages
-  uint total_pages_on_disk;         
+  uint total_pages_on_disk;
+  // ====================== TASK 2
+  #if SELECTION==SCFIFO
+    struct fifoQueue *fifoQueue;
+  #endif
 };

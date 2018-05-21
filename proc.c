@@ -203,9 +203,9 @@ fork(void)
     // copy data from original process
     ;
     for (int copyPageIndex = 0; copyPageIndex < MAX_TOTAL_PAGES; ++copyPageIndex) {
-            np->pages.va[copyPageIndex] = curproc->pages.va[copyPageIndex];
-            np->pages.location[copyPageIndex] = curproc->pages.location[copyPageIndex];
-            np->pages.count = curproc->pages.count;
+      np->pages.va[copyPageIndex] = curproc->pages.va[copyPageIndex];
+      np->pages.location[copyPageIndex] = curproc->pages.location[copyPageIndex];
+      np->pages.count = curproc->pages.count;
     }
     if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
         kfree(np->kstack);
@@ -677,7 +677,7 @@ addPage(uint va , int type){
 
 void
 removePage(uint va) {
-struct proc *curproc = myproc();
+  struct proc *curproc = myproc();
     int index;
     int exists = findPage(va);
     if(!exists) panic("cannot remove page");
@@ -688,79 +688,108 @@ struct proc *curproc = myproc();
     curproc->pages.accesses[index] = 0;
 }
 
-void
-removeElement(uint va, int type){
+/**
+ * Find
+ */
+int findFirstInScfifo(int location, int pred) {
   struct proc *curproc = myproc();
-  int i;  
-  switch(type){
-    case 1:
-        for(i = 0; i < MAX_PSYC_PAGES; i++) {
 
-            if(curproc->lifoStack.va[i] == va) {
-                updateLifo(i, va, 0);
-                if(i == curproc->lifoStack.first) {
-                    curproc->lifoStack.first = (curproc->lifoStack.first - 1) % MAX_PSYC_PAGES;
-                }
-                return;
-            }
-        }
-        break;
+	while (curproc->fifoQueue.elements[location] == pred) {
+		location = (location + 1) % MAX_PSYC_PAGES;
+	}
 
-    case 2:
-        for(i = 0; i < MAX_PSYC_PAGES; i++) {
-            if(curproc->fifoQueue.va[i] == va) {
-                updateFifo(i, va, 0);
-                if(i == curproc->fifoQueue.first) {
-                    curproc->fifoQueue.first = (curproc->fifoQueue.first + 1) % MAX_PSYC_PAGES;
-                }
-                if(i == proc->fifoQueue.last) {
-                    proc->fifoQueue.last = (proc->fifoQueue.last - 1) % MAX_PSYC_PAGES;
-                }
-                return;
-            }
-        }
-        break;
+	return location;
+}
 
-    default:
-        panic("no element to remove");
-    }
+/**
+ *
+ *
+ */
+void enqueueScfifo(uint virtual_address) {
+  struct proc *curproc = myproc();
+	int last = findFirstInScfifo(curproc->fifoQueue.last, 1);
+	updateScfifo(last, virtual_address, 1);
+	last = (last + 1) % MAX_PSYC_PAGES;
+}
+
+uint dequeueScfifo() {
+  struct proc *curproc = myproc();
+	int first;
+	uint va;
+	pte_t* page;
+	do{
+		first = findFirstInScfifo(curproc->fifoQueue.first,0);
+		va = curproc->fifoQueue.va[first];
+		page = walkpgdir(curproc->pgdir, (void*)va, 0);
+		if(PTE_FLAGS(*page) & PTE_A) {
+			*page &= ~PTE_A;
+			first = (first + 1) % MAX_PSYC_PAGES;
+			continue;
+		}
+		updateScfifo(first, va, 0);
+		curproc->fifoQueue.first = (first + 1) % MAX_PSYC_PAGES;
+		return va;
+	} while(1);
+}
+
+void
+removeElement(uint va){
+	struct proc *curproc = myproc();
+	switch(SELECTION) {
+		case SCFIFO:
+			for(int index = 0; index < MAX_PSYC_PAGES; index++) {
+				if(curproc->fifoQueue.va[index] == va) {
+					updateScfifo(index, va, 0);
+					if(index == curproc->fifoQueue.first) {
+						curproc->fifoQueue.first = (curproc->fifoQueue.first + 1) % MAX_PSYC_PAGES;
+					}
+					if(index == curproc->fifoQueue.last) {
+						curproc->fifoQueue.last = (curproc->fifoQueue.last - 1) % MAX_PSYC_PAGES;
+					}
+					return;
+				}
+			}
+			break;
+
+		default:
+			panic("no element to remove");
+	}
 }
 
 void
 updateLap() {
-struct proc *curproc = myproc();
-    int i;
-    pte_t* page;
-    for(i = 0; i < MAX_TOTAL_PAGES; i++) {
-        if(curproc->pages.location[i] == PHYSICAL) {
-            page = walkpgdir(curproc->pgdir, (void*) curproc->pages.va[i], 0);
-            if(PTE_FLAGS(*page) & PTE_A) {
-                curproc->pages.accesses[i]++;
-                *page &= ~PTE_A;
-            }
-        }
-    }
+	struct proc *curproc = myproc();
+	int i;
+	pte_t* page;
+	for(i = 0; i < MAX_TOTAL_PAGES; i++) {
+		if(curproc->pages.location[i] == RAM) {
+			page = walkpgdir(curproc->pgdir, (void*) curproc->pages.va[i], 0);
+			if(PTE_FLAGS(*page) & PTE_A) {
+				curproc->pages.accesses[i]++;
+				*page &= ~PTE_A;
+			}
+		}
+	}
 }
 
 uint
 getLap() {
-struct proc *curproc = myproc();
-    int i;
-    int min_access = -1;
-    int min_va = 0;
-    for(i = 0; i < MAX_TOTAL_PAGES; i++) {
-        if(curproc->pages.location[i] == PHYSICAL) {
-            min_access = curproc->pages.accesses[i];
-            min_va = curproc->pages.va[i];
-            break;
-        }
-    }
-    if(min_access == -1) panic("no pages in ram");
-    for(; i < MAX_TOTAL_PAGES; i++) {
-        if(curproc->pages.location[i] == PHYSICAL && curproc->pages.accesses[i] < min_access) {
-            min_access = curproc->pages.accesses[i];
-            min_va = curproc->pages.va[i];
-        }
-    }
-    return min_va;
+	struct proc *curproc = myproc();
+	int min_access = -1;
+	int min_va = 0;
+	for(int index = 0; index < MAX_TOTAL_PAGES; index++) {
+		if(proc->pages.location[i] == RAM) {
+			min_access = proc->pages.accesses[i];
+			min_va = proc->pages.va[i];
+			break;
+		}
+	}
+	if(min_access == -1) panic("no pages in ram");
+	for(; i < MAX_TOTAL_PAGES; i++) {
+		if(proc->pages.location[i] == RAM && proc->pages.accesses[i] < min_access) {
+			min_access = proc->pages.accesses[i];
+			min_va = proc->pages.va[i];
+		}
+	}
+	return min_va;
 }
