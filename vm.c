@@ -235,6 +235,7 @@ loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz)
 int
 allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 {
+  struct proc *curproc = myproc();
   char *mem;
   uint a;
 
@@ -244,9 +245,11 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     return oldsz;
 
   a = PGROUNDUP(oldsz);
+  // Task 1: on page fault (out of memory), add page.
   for(; a < newsz; a += PGSIZE){
-    if(get_physical_pages() >= MAX_PSYC_PAGES && SELECTION != NONE ) { //added by noy
-      getPageBySelection();
+    if(get_physical_pages() >= MAX_PSYC_PAGES && SELECTION != NONE ) {
+      // Too many physical pages.
+      get_page();
     }
     mem = kalloc();
     if(mem == 0){
@@ -254,15 +257,21 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       deallocuvm(pgdir, newsz, oldsz);
       return 0;
     }
-    pagesCounter++; //added by noy
+
+    pagesCounter++;
     memset(mem, 0, PGSIZE);
-    if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){
-      cprintf("allocuvm out of memory (2)\n");
-      deallocuvm(pgdir, newsz, oldsz);
-      kfree(mem);
-      return 0;
+    // Task 2: override "out of memory" with write-to-disk.
+    if((strcmp(curproc->name, "sh") != 0) && (strcmp(curproc->name, "init") != 0)){
+        switch(SELECTION) {
+          case SCFIFO:
+            enqueueScfifo(a);
+            break;
+        }
     }
+    insert_page_va(a, PHYSICAL);
+    mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U);
   }
+
   return newsz;
 }
 
@@ -326,7 +335,7 @@ NewDeallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     }
     removePage(a);
     if (SELECTION == SCFIFO) {
-        removeElement(a,2);
+        removeElement(a);
     }
   }
   return newsz;
@@ -436,6 +445,48 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
     va = va0 + PGSIZE;
   }
   return 0;
+}
+
+/**
+ * Gets the next virtual address (according to the selection scheme).
+ */
+uint get_va() {
+  switch(SELECTION) {
+    case SCFIFO:
+      return dequeueScfifo();
+    case LAPA:
+      return getLap();
+  }
+
+  return 0;
+}
+
+void get_page() {
+  uint va = get_va();
+  struct proc *curproc = myproc();
+  // Get the PTE of the virtual address.
+  pte_t* pte = walkpgdir(curproc->pgdir, (void*) va, 0);
+  // Get physical address of page's actual data.
+  uint addr = (uint) P2V(PTE_ADDR(*pte));
+  int offset = get_offset_for_page_insert(va);
+  insert_page_va(va, DISK);
+  // Set paged out to secondary storage flag.
+  *pte |= PTE_PG;
+  // Page no longer present & not user-controlled.
+  *pte &= ~PTE_P;
+  *pte &= ~PTE_U;
+
+  // Write the page to the swap file.
+  if(writeToSwapFile(curproc, (char*)addr, offset, PGSIZE) == -1) {
+      panic("can't write to swap file");
+  }
+
+  // Remove page from physical memory.
+  kfree((char*) addr);
+  pagesCounter--;
+
+  // Clear that pesky flag.
+  lcr3(V2P(curproc->pgdir));
 }
 
 //PAGEBREAK!

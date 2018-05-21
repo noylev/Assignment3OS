@@ -83,30 +83,30 @@ trap(struct trapframe *tf)
     	curproc->page_faults++;
     	uint cr2 = (uint) (PGROUNDDOWN(rcr2()));
     	pte_t* missing_page = walkpgdir(curproc->pgdir, (void*) cr2, 0);
-            if(!(PTE_FLAGS(*missing_page) & PTE_PG)) {
-                panic("segmentation fault");
-            }
-            //if(get_physical_pages() >= MAX_PSYC_PAGES) {
-             //   getPageBySelection();
-           // }
-      	int offset = getOffsetNotSet(cr2);
-      	char* page_mem;
-      	page_mem = kalloc();
-      	if(page_mem == 0) panic("could not allocate memory for page");
-      	pagesCounter++;
-        if(SELECTION == SCFIFO) enqueueScfifo(cr2);
-        // if(SELECTION == LIFO) pushLifo(cr2);
-        memset(page_mem, 0, PGSIZE);
-        if(readFromSwapFile(curproc, page_mem, offset, PGSIZE) == -1)
-        panic("didnt read from swap file - trap.c");
-        uint flags = PTE_FLAGS(*missing_page);
-        *missing_page = V2P(page_mem) | flags | PTE_P | PTE_U | PTE_W;
-        *missing_page &= ~PTE_PG;
-        addPage(cr2,1);
+      if(!(PTE_FLAGS(*missing_page) & PTE_PG)) {
+          panic("segmentation fault");
       }
+            //if(get_physical_pages() >= MAX_PSYC_PAGES) {
+             //   get_page();
+           // }
+    	int offset = getOffsetNotSet(cr2);
+    	char* page_mem;
+    	page_mem = kalloc();
+    	if(page_mem == 0) panic("could not allocate memory for page");
+    	pagesCounter++;
+      #if SELECTION==SCFIFO
+        enqueueScfifo(cr2);
+      #endif
+      memset(page_mem, 0, PGSIZE);
+      if (readFromSwapFile(curproc, page_mem, offset, PGSIZE) == -1) {
+        panic("didnt read from swap file - trap.c");
+      }
+      uint flags = PTE_FLAGS(*missing_page);
+      *missing_page = V2P(page_mem) | flags | PTE_P | PTE_U | PTE_W;
+      *missing_page &= ~PTE_PG;
+      insert_page_va(cr2, PHYSICAL);
+    }
     break;
-        /*added by noy*****************************************/
-
 
   //PAGEBREAK: 13
   default:
@@ -133,7 +133,9 @@ trap(struct trapframe *tf)
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
   if(myproc() && myproc()->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER) {
-    if(SELECTION == LAP) updateLap();
+    #if SELECTION==LAP
+      updateLap();
+    #endif
     yield();
   }
 

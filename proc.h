@@ -44,11 +44,9 @@ enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 
 /* ====== task1 pages stuff =======  */
-
-typedef enum  {BLANK, PHYSICAL, DISK} memory_location;
+#include "pages_def.h"
 
 struct pages {
-
     int count;
     uint va[MAX_TOTAL_PAGES];
     memory_location location[MAX_TOTAL_PAGES];
@@ -56,16 +54,15 @@ struct pages {
 };
 
 struct diskPage{
-
     char elements;
-    uint virtual_address;
+    uint va;
 };
 
 #if SELECTION==SCFIFO
 
 struct fifoQueue {
 	char elements[MAX_PSYC_PAGES];
-	uint virtual_address[MAX_PSYC_PAGES];
+	uint va[MAX_PSYC_PAGES];
 	int first;
 	int last;
 	int count;
@@ -105,6 +102,6 @@ struct proc {
   uint total_pages_on_disk;
   // ====================== TASK 2
   #if SELECTION==SCFIFO
-    struct fifoQueue *fifoQueue;
+    struct fifoQueue fifoQueue;
   #endif
 };
