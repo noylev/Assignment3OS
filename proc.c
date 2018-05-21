@@ -690,36 +690,36 @@ struct proc *curproc = myproc();
 
 void
 removeElement(uint va, int type){
-// struct proc *curproc = myproc();
-    // int i;
-    switch(type){
-    // case 1:
-    //     for(i = 0; i < MAX_PSYC_PAGES; i++) {
-    //
-    //         if(curproc->lifoStack.va[i] == va) {
-    //             updateLifo(i, va, 0);
-    //             if(i == curproc->lifoStack.first) {
-    //                 curproc->lifoStack.first = (curproc->lifoStack.first - 1) % MAX_PSYC_PAGES;
-    //             }
-    //             return;
-    //         }
-    //     }
-    //     break;
-    //
-    // case 2:
-    //     for(i = 0; i < MAX_PSYC_PAGES; i++) {
-    //         if(curproc->fifoQueue.va[i] == va) {
-    //             updateFifo(i, va, 0);
-    //             if(i == curproc->fifoQueue.first) {
-    //                 curproc->fifoQueue.first = (curproc->fifoQueue.first + 1) % MAX_PSYC_PAGES;
-    //             }
-    //             if(i == proc->fifoQueue.last) {
-    //                 proc->fifoQueue.last = (proc->fifoQueue.last - 1) % MAX_PSYC_PAGES;
-    //             }
-    //             return;
-    //         }
-    //     }
-    //     break;
+  struct proc *curproc = myproc();
+  int i;  
+  switch(type){
+    case 1:
+        for(i = 0; i < MAX_PSYC_PAGES; i++) {
+
+            if(curproc->lifoStack.va[i] == va) {
+                updateLifo(i, va, 0);
+                if(i == curproc->lifoStack.first) {
+                    curproc->lifoStack.first = (curproc->lifoStack.first - 1) % MAX_PSYC_PAGES;
+                }
+                return;
+            }
+        }
+        break;
+
+    case 2:
+        for(i = 0; i < MAX_PSYC_PAGES; i++) {
+            if(curproc->fifoQueue.va[i] == va) {
+                updateFifo(i, va, 0);
+                if(i == curproc->fifoQueue.first) {
+                    curproc->fifoQueue.first = (curproc->fifoQueue.first + 1) % MAX_PSYC_PAGES;
+                }
+                if(i == proc->fifoQueue.last) {
+                    proc->fifoQueue.last = (proc->fifoQueue.last - 1) % MAX_PSYC_PAGES;
+                }
+                return;
+            }
+        }
+        break;
 
     default:
         panic("no element to remove");

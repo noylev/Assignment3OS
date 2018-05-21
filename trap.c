@@ -94,8 +94,8 @@ trap(struct trapframe *tf)
       	page_mem = kalloc();
       	if(page_mem == 0) panic("could not allocate memory for page");
       	pagesCounter++;
+        if(SELECTION == SCFIFO) enqueueScfifo(cr2);
         // if(SELECTION == LIFO) pushLifo(cr2);
-        // else if(SELECTION == SCFIFO) enqueueScfifo(cr2);
         memset(page_mem, 0, PGSIZE);
         if(readFromSwapFile(curproc, page_mem, offset, PGSIZE) == -1)
         panic("didnt read from swap file - trap.c");
@@ -132,9 +132,10 @@ trap(struct trapframe *tf)
 
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
-  if(myproc() && myproc()->state == RUNNING &&
-     tf->trapno == T_IRQ0+IRQ_TIMER)
+  if(myproc() && myproc()->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER) {
+    if(SELECTION == LAP) updateLap();
     yield();
+  }
 
   // Check if the process has been killed since we yielded
   if(myproc() && myproc()->killed && (tf->cs&3) == DPL_USER)

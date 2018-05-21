@@ -55,7 +55,7 @@ pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc){ //noy : I removed the
     if(!alloc || (pgtab = (pte_t*)kalloc()) == 0)
       return 0;
     pagesCounter++; //added by noy
-    
+
     // Make sure all those PTE_P bits are zero.
     memset(pgtab, 0, PGSIZE);
     // The permissions here are overly generous, but they can
@@ -245,9 +245,9 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
   a = PGROUNDUP(oldsz);
   for(; a < newsz; a += PGSIZE){
-    /*if(get_physical_pages() >= MAX_PSYC_PAGES && SELECTION != NONE ) { //added by noy
+    if(get_physical_pages() >= MAX_PSYC_PAGES && SELECTION != NONE ) { //added by noy
       getPageBySelection();
-    }*/
+    }
     mem = kalloc();
     if(mem == 0){
       cprintf("allocuvm out of memory\n");
@@ -312,7 +312,7 @@ NewDeallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     pte = walkpgdir(pgdir, (char*)a, 0);
     if(!pte)
       a += (NPTENTRIES - 1) * PGSIZE;
-     else if((*pte & PTE_P) != 0){   
+     else if((*pte & PTE_P) != 0){
         pa = PTE_ADDR(*pte);
         if(pa == 0)
           panic("kfree");
@@ -323,9 +323,12 @@ NewDeallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     }
     else{
         getOffsetNotSet(a);
-    } 
+    }
     removePage(a);
-  }    
+    if (SELECTION == SCFIFO) {
+        removeElement(a,2);
+    }
+  }
   return newsz;
 }
 
@@ -441,4 +444,3 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 // Blank page.
 //PAGEBREAK!
 // Blank page.
-
