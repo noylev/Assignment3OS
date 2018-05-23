@@ -462,31 +462,107 @@ uint get_va() {
 }
 
 void swap_page() {
-  uint va = get_va();
-  struct proc *curproc = myproc();
-  // Get the PTE of the virtual address.
-  pte_t* pte = walkpgdir(curproc->pgdir, (void*) va, 0);
-  // Get physical address of page's actual data.
-  uint addr = (uint) P2V(PTE_ADDR(*pte));
-  int offset = get_offset_for_page_insert(va);
-  insert_page_va(va, DISK);
-  // Set paged out to secondary storage flag.
-  *pte |= PTE_PG;
-  // Page no longer present & not user-controlled.
-  *pte &= ~PTE_P;
-  *pte &= ~PTE_U;
 
-  // Write the page to the swap file.
-  if(writeToSwapFile(curproc, (char*)addr, offset, PGSIZE) == -1) {
-      panic("can't write to swap file");
+  if (strcmp(proc->name, "init") == 0 || strcmp(proc->name, "sh") == 0) {
+    proc->pagesinmem++;
+    return;
   }
+  struct proc *curproc = myproc();
+  uint va = get_va();
 
-  // Remove page from physical memory.
-  kfree((char*) addr);
+  #if SELECTION==SCFIFO
+    //cprintf("swapPages: calling scfifo_swap\n");
+    scfifo_swap(addr);
+  #endif
+
+  #if SELECTION==NFU
+    nfuSwap(addr);
+  #endif
+
+
   pagesCounter--;
 
   // Clear that pesky flag.
   lcr3(V2P(curproc->pgdir));
+}
+
+
+
+void scfifo_swap(uint addr) {
+  int swapped_page_index, swap_file_part_index;
+  char buf[BUF_SIZE];
+  pte_t *pte1, *pte2;
+  struct freepg *mover, *oldTail;
+
+  if (proc->head == 0)
+    panic("scfifo_swap: proc->head is NULL");
+  if (proc->head->next == 0)
+    panic("scfifo_swap: single page in phys mem");
+
+  mover = proc->tail;
+  oldTail = proc->tail;// to avoid infinite loop if somehow everyone was accessed
+  do{
+    //move mover from tail to head
+    proc->tail = proc->tail->prev;
+    proc->tail->next = 0;
+    mover->prev = 0;
+    mover->next = proc->head;
+    proc->head->prev = mover;
+    proc->head = mover;
+    mover = proc->tail;
+  } while(checkAccBit(proc->head->va) && mover != oldTail);
+
+  if(DEBUG){
+    //cprintf("\naddress between 0x%x and 0x%x was accessed but was on disk.\n", addr, addr+PGSIZE);
+    cprintf("SCFIFO chose to page out page starting at 0x%x \n\n", proc->head->va);
+  }
+
+  //find the address of the page table entry to copy into the swap file
+  pte1 = walkpgdir(proc->pgdir, (void*)proc->head->va, 0);
+  if (!*pte1)
+    panic("swapFile: SCFIFO pte1 is empty");
+
+  //find a swap file page descriptor slot
+  for (swapped_page_index = 0; swapped_page_index < MAX_PSYC_PAGES; swapped_page_index++){
+    if (proc->swappedpages[swapped_page_index].va == (char*)PTE_ADDR(addr))
+      goto foundswappedpageslot;
+  }
+  panic("scfifo_swap: SCFIFO no slot for swapped page");
+
+foundswappedpageslot:
+
+  proc->swappedpages[swapped_page_index].va = proc->head->va;
+  //assign the physical page to addr in the relevant page table
+  pte2 = walkpgdir(proc->pgdir, (void*)addr, 0);
+  if (!*pte2)
+    panic("swapFile: SCFIFO pte2 is empty");
+  //set page table entry
+  //TODO verify we're not setting PTE_U where we shouldn't be...
+  *pte2 = PTE_ADDR(*pte1) | PTE_U | PTE_W | PTE_P;// access bit is zeroed...
+
+  for (swap_file_part_index = 0; swap_file_part_index < 4; swap_file_part_index++) {
+    int loc = (swapped_page_index * PGSIZE) + ((PGSIZE / 4) * swap_file_part_index);
+    int addroffset = ((PGSIZE / 4) * swap_file_part_index);
+    // int read, written;
+    memset(buf, 0, BUF_SIZE);
+    //copy the new page from the swap file to buf
+    // read =
+    readFromSwapFile(proc, buf, loc, BUF_SIZE);
+    // cprintf("read:%d\n", read);//TODO delete
+    //copy the old page from the memory to the swap file
+    //written =
+    writeToSwapFile(proc, (char*)(P2V_WO(PTE_ADDR(*pte1)) + addroffset), loc, BUF_SIZE);
+    // cprintf("written:%d\n", written);//TODO delete
+    //copy the new page from buf to the memory
+    memmove((void*)(PTE_ADDR(addr) + addroffset), (void*)buf, BUF_SIZE);
+  }
+  //update the page table entry flags, reset the physical page address
+  *pte1 = PTE_U | PTE_W | PTE_PG;
+  //update l to hold the new va
+  //l->next = proc->head;
+  //proc->head = l;
+  proc->head->va = (char*)PTE_ADDR(addr);
+
 }
 
 //PAGEBREAK!
