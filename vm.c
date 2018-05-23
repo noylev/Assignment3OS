@@ -457,6 +457,9 @@ uint get_va() {
   #if SELECTION==LAPA
       return getLap();
   #endif
+
+  // Error.
+  return -1;
 }
 
 void swap_page() {
@@ -493,18 +496,19 @@ void update_access_counters(struct proc *process) {
   pte_t* pte;
   int bit_comparer = 1;
   for (int index = 0; index < MAX_PSYC_PAGES; index++) {
-    page_accesses = process->diskPages[index].access_counter;
+
+    page_accesses = process->accesses[index];
     pte = walkpgdir(process->pgdir, (void *) process->diskPages[index].va, 0);
     page_accesses >>= 1;
     if (*pte & PTE_A){
       page_accesses |= (bit_comparer << 31);
       *pte &= ~PTE_A;
     }
-    process->diskPages[index].access_counter = page_accesses;
+    process->accesses[index] = page_accesses;
   }
+
   return;
 }
-
 
 //PAGEBREAK!
 // Blank page.

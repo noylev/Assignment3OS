@@ -52,7 +52,10 @@ trap(struct trapframe *tf)
     if(cpuid() == 0){
       acquire(&tickslock);
 
+      #if SELECTION==NFUA || SELECTION==LAPA
+      // Age page accesses.
       update_process_page_accesses();
+      #endif
 
       ticks++;
       wakeup(&ticks);
@@ -93,18 +96,24 @@ trap(struct trapframe *tf)
   		if(get_physical_pages() >= MAX_PSYC_PAGES) {
   		    swap_page();
   		}
+
     	int offset = get_page_offset_and_unset_page(cr2);
     	char* page_mem;
     	page_mem = kalloc();
-    	if(page_mem == 0) panic("could not allocate memory for page");
+    	if (page_mem == 0) {
+        panic("could not allocate memory for page");
+      }
     	pagesCounter++;
+
       #if SELECTION==SCFIFO
         enqueueScfifo(cr2);
       #endif
+
       memset(page_mem, 0, PGSIZE);
       if (readFromSwapFile(curproc, page_mem, offset, PGSIZE) == -1) {
         panic("didnt read from swap file - trap.c");
       }
+
       uint flags = PTE_FLAGS(*missing_page);
       *missing_page = V2P(page_mem) | flags | PTE_P | PTE_U | PTE_W;
       *missing_page &= ~PTE_PG;
@@ -137,9 +146,6 @@ trap(struct trapframe *tf)
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
   if(myproc() && myproc()->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER) {
-    #if SELECTION==LAP
-      updateLap();
-    #endif
     yield();
   }
 
