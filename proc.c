@@ -734,7 +734,10 @@ uint dequeueScfifo() {
 }
 
 void removeElement(uint va) {
+  #if SELECTION != NONE
 	struct proc *curproc = myproc();
+  #endif
+
 	#if SELECTION==SCFIFO
 		for(int index = 0; index < MAX_PSYC_PAGES; index++) {
 			if(curproc->fifoQueue.va[index] == va) {

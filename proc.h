@@ -58,7 +58,6 @@ struct diskPage{
     uint va;
 };
 
-#if SELECTION==SCFIFO
 
 struct fifoQueue {
 	char elements[MAX_PSYC_PAGES];
@@ -67,8 +66,6 @@ struct fifoQueue {
 	int last;
 	int count;
 };
-
-#endif
 
 // Per-process state
 struct proc {
@@ -101,7 +98,5 @@ struct proc {
   // total number of paged out pages
   uint total_pages_on_disk;
   // ====================== TASK 2
-  #if SELECTION==SCFIFO
-    struct fifoQueue fifoQueue;
-  #endif
+  struct fifoQueue fifoQueue;
 };
