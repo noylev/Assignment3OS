@@ -8,7 +8,7 @@
 #include "elf.h"
 
 
-int strcmp(const char *p, const char *q){ /*addded by noy ***************/
+int strcmp(const char *p, const char *q) { /*addded by noy ***************/
   int answer;
   while(*p && *p == *q){
     p++;
@@ -456,6 +456,9 @@ uint get_va() {
   #endif
   #if SELECTION==LAPA
       return getLap();
+  #endif
+  #if SELECTION==NFUA
+      return get_nfua_page_to_swap();
   #endif
 
   // Error.

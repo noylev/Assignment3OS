@@ -682,7 +682,11 @@ void removePage(uint va) {
   curproc->pages.count--;
   curproc->pages.va[index] = 0;
   curproc->pages.location[index] = BLANK;
+  #if SELECTION == LAPA
+  curproc->pages.accesses[index] = 0xFFFFFFFF;
+  #else
   curproc->pages.accesses[index] = 0;
+  #endif
 }
 
 /**
@@ -757,8 +761,9 @@ void updateLap() {
 	for(int index = 0; index < MAX_TOTAL_PAGES; index++) {
 		if(curproc->pages.location[index] == PHYSICAL) {
 			page = walkpgdir(curproc->pgdir, (void*) curproc->pages.va[index], 0);
+			curproc->pages.accesses[index] >>= 0;
 			if(PTE_FLAGS(*page) & PTE_A) {
-				curproc->pages.accesses[index]++;
+			  curproc->pages.accesses[index] |= (1 << 31);;
 				*page &= ~PTE_A;
 			}
 		}
@@ -790,6 +795,7 @@ uint getLap() {
 	return min_va;
 }
 
+
 /**
  * Update number of acccess of the pages for living processes.
  */
@@ -799,4 +805,33 @@ void update_process_page_accesses() {
       update_access_counters(curproc);
     }
   }
+}
+
+
+/**
+ * Get page to swap by NFUA selection scheme.
+ */
+uint get_nfua_page_to_swap() {
+	struct proc *curproc = myproc();
+	int min_access = -1;
+	int min_va = 0;
+  int index;
+
+	for (index = 0; index < MAX_TOTAL_PAGES; index++) {
+		if (curproc->pages.location[index] == PHYSICAL) {
+			min_access = curproc->pages.accesses[index];
+			min_va = curproc->pages.va[index];
+			break;
+		}
+	}
+	if (min_access == -1) panic("no pages in ram");
+	for (; index < MAX_TOTAL_PAGES; index++) {
+		if (
+        curproc->pages.location[index] == PHYSICAL &&
+        curproc->pages.accesses[index] < min_access) {
+			min_access = curproc->pages.accesses[index];
+			min_va = curproc->pages.va[index];
+		}
+	}
+	return min_va;
 }
