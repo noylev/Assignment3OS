@@ -1,0 +1,83 @@
+On branch master
+Your branch is up-to-date with 'origin/master'.
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git checkout -- <file>..." to discard changes in working directory)
+
+	modified:   .gitignore
+	modified:   exec.c
+	modified:   pages_def.h
+	modified:   trap.c
+	modified:   vm.c
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+
+	.files
+	bootblockother.o
+	entry.o
+	entryother
+	entryother.asm
+	entryother.d
+	entryother.o
+	exec.d
+	exec.o
+	file.d
+	file.o
+	fs.d
+	fs.o
+	ide.d
+	ide.o
+	initcode
+	initcode.asm
+	initcode.d
+	initcode.o
+	initcode.out
+	ioapic.d
+	ioapic.o
+	kalloc.d
+	kalloc.o
+	kbd.d
+	kbd.o
+	kernel
+	kernel.asm
+	kernel.sym
+	lapic.d
+	lapic.o
+	log.d
+	log.o
+	main.d
+	main.o
+	mp.d
+	mp.o
+	picirq.d
+	picirq.o
+	pipe.d
+	pipe.o
+	proc.d
+	proc.o
+	sleeplock.d
+	sleeplock.o
+	spinlock.d
+	spinlock.o
+	string.d
+	string.o
+	swtch.o
+	syscall.d
+	syscall.o
+	sysfile.d
+	sysfile.o
+	sysproc.d
+	sysproc.o
+	trap.d
+	trap.o
+	trapasm.o
+	uart.d
+	uart.o
+	vectors.S
+	vectors.o
+	vm.d
+	vm.o
+	xv6.img
+
+no changes added to commit (use "git add" and/or "git commit -a")
