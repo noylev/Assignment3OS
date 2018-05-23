@@ -7,38 +7,6 @@
 #include "x86.h"
 #include "elf.h"
 
-/*** added by Noy***
-int strcmp(const char *p, const char *q);
-
-void
-resetcurprocFifo(int i){
-	curproc->fifoQueue.first = 0;
-	curproc->fifoQueue.last = 0;
-	curproc->fifoQueue.count = 0;
-	curproc->fifoQueue.elements[i] = 0;
-	curproc->fifoQueue.va[i] = 0;	  
-}
-
-void resetcurprocLifo(int i){
-	curproc->lifoStack.first = 0;
-	curproc->lifoStack.count = 0;
-	curproc->lifoStack.elements[i] = 0;
-	curproc->lifoStack.va[i] = 0;
-}
-
-void
-resetAllFields(){
-	int i;
-	for (i = 0; i < MAX_TOTAL_PAGES; ++i) {
-                //resetcurprocFifo(i);
-		//resetcurprocLifo(i);
-		curproc->pages.va[i] = 0;
-		curproc->pages.count = 0;
-		curproc->pages.location[i] = 0;
-		curproc->pages.accesses[i] = 0;
-	}	
-}*/
-/*** added by Noy***/
 int
 exec(char *path, char **argv)
 {
@@ -67,7 +35,7 @@ exec(char *path, char **argv)
   //resetAllFields();
   removeSwapFile(curproc);
   /*--------------------added by noy*/
-  
+
   // Check ELF header
   if(readi(ip, (char*)&elf, 0, sizeof(elf)) != sizeof(elf))
     goto bad;

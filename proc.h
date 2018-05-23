@@ -56,7 +56,6 @@ struct pages {
 struct diskPage{
     char elements;
     uint va;
-    uint access_counter;
 };
 
 #if SELECTION==SCFIFO
