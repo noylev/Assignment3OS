@@ -734,7 +734,10 @@ uint dequeueScfifo() {
 }
 
 void removeElement(uint va) {
+  #if SELECTION != NONE
 	struct proc *curproc = myproc();
+  #endif
+
 	#if SELECTION==SCFIFO
 		for(int index = 0; index < MAX_PSYC_PAGES; index++) {
 			if(curproc->fifoQueue.va[index] == va) {
@@ -810,7 +813,7 @@ uint getLap() {
 
 //this function calculate number of bits in page_access we send for LAPA
 int numberOfSetBits(uint i){
-     
+
      i = i - ((i >> 1) & 0x55555555);
      i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
      return (((i + (i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
