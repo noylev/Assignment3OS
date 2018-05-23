@@ -152,6 +152,7 @@ int		         getFirstElement(int);
 int		         find_page_index(uint);
 void           removeElement(uint va);
 uint           get_nfua_page_to_swap();
+void print_procces_info(struct proc* p, int print_free_pages);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

@@ -67,15 +67,6 @@ struct fifoQueue {
 	int count;
 };
 
-struct agingQueueNode {
-  int page_index;
-  struct agingQueueNode * prev;
-  struct agingQueueNode * next;
-};
-
-struct agingQueueNode * aq_head;
-struct agingQueueNode * aq_tail;
-
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)

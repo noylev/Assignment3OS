@@ -525,34 +525,14 @@ kill(int pid)
 void
 procdump(void)
 {
-  static char *states[] = {
-  [UNUSED]    "unused",
-  [EMBRYO]    "embryo",
-  [SLEEPING]  "sleep ",
-  [RUNNABLE]  "runble",
-  [RUNNING]   "run   ",
-  [ZOMBIE]    "zombie"
-  };
-  int i;
-  struct proc *p;
-  char *state;
-  uint pc[10];
-
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->state == UNUSED)
-      continue;
-    if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
-      state = states[p->state];
-    else
-      state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
-    if(p->state == SLEEPING){
-      getcallerpcs((uint*)p->context->ebp+2, pc);
-      for(i=0; i<10 && pc[i] != 0; i++)
-        cprintf(" %p", pc[i]);
-    }
-    cprintf("\n");
-  }
+	struct proc *p;
+	for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+		if(p->state == UNUSED)
+			continue;
+		print_procces_info(p, 0);
+	}
+	// cprintf("%d / %d = \n", (totalSystemPages - pagesCounter) , totalSystemPages);
+	// cprintf("%d# free pages in system\n", (((totalSystemPages - pagesCounter) * 100) / totalSystemPages));
 }
 
 
@@ -563,6 +543,7 @@ int get_physical_pages() {
     if(curproc->pages.location[index] == PHYSICAL)
       pagesInRam++;
   }
+  cprintf("number of physical pages %d\n", pagesInRam);
   return pagesInRam;
 }
 
@@ -773,7 +754,7 @@ void updateLap() {
 	}
 }
 
-//return the va of the page  with the smallest number of "1"s OR If there are several such pages, the one with the lowest counter should be removed    
+//return the va of the page  with the smallest number of "1"s OR If there are several such pages, the one with the lowest counter should be removed
 uint getLap() {
 	struct proc *curproc = myproc();
 	int min_access = -1;
@@ -792,20 +773,20 @@ uint getLap() {
 	for (; index < MAX_TOTAL_PAGES; index++) {
             int num_of_bits = numberOfSetBits(curproc->pages.accesses[index]);
 		if (curproc->pages.location[index] == PHYSICAL && num_of_bits <= min_access) { //trying to find the lowest//number of 1's in a page
-                        if((num_of_bits == min_access)&&(curproc->pages.accesses[index]<actuall_min_access)){//If there are several such pages, the one with the lowest counter should be removed                                
+                        if((num_of_bits == min_access)&&(curproc->pages.accesses[index]<actuall_min_access)){//If there are several such pages, the one with the lowest counter should be removed
                                     actuall_min_access = curproc->pages.accesses[index];
                                     min_va = curproc->pages.va[index];
-                               }                            
-                                                    
-                        else{    
-                            
+                               }
+
+                        else{
+
 			actuall_min_access = curproc->pages.accesses[index];
                         min_access = num_of_bits;
 			min_va = curproc->pages.va[index];
-                        
-                        }                          
-		}		
-		
+
+                        }
+		}
+
 	}
 	return min_va;
 }
@@ -860,26 +841,37 @@ uint get_nfua_page_to_swap() {
 	return min_va;
 }
 
-
-/// Aging queue BS
-void aging_queue_push_node(int index) {
-  struct agingQueueNode * new_node = (agingQueueNode *) malloc(sizeof(agingQueueNode));
-  *new_node->page_index = index;
-  *new_node->prev = NULL;
-  *new_node->next = aq_head;
-  *aq_head->prev = new_node;
-  aq_head = new_node;
-}
-
-uint aging_queue_pop_last() {
-  struct proc * curproc = myproc();
-  uint result = curproc->pages[*aq_tail->page_index].va;
-  struct agingQueueNode * old_tail = aq_tail;
-
-  if (aq_tail != aq_head) {
-    aq_tail = old_tail->prev;
-  }
-
-  free(old_tail);
-  return result;
+void print_procces_info(struct proc* p, int print_free_pages) {
+	static char *states[] = {
+			[UNUSED]    "unused",
+			[EMBRYO]    "embryo",
+			[SLEEPING]  "sleep ",
+			[RUNNABLE]  "runble",
+			[RUNNING]   "run   ",
+			[ZOMBIE]    "zombie"
+	};
+	int i;
+	char *state;
+	uint pc[10];
+	cprintf("\n");
+	if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
+		state = states[p->state];
+	else
+		state = "???";
+	cprintf("%d %s %s", p->pid, state, p->name);
+	if(p->state == SLEEPING) {
+		getcallerpcs((uint*)p->context->ebp+2, pc);
+		for(i=0; i<10 && pc[i] != 0; i++) {
+			cprintf(" %p", pc[i]);
+		}
+	}
+	cprintf("\nallocated memory pages: %d\n",p->pages.count);
+	cprintf("paged out: %d\n",p->pages_on_disk);
+	cprintf("page faults: %d\n",p->page_faults);
+	cprintf("total number of paged out: %d\n",p->total_pages_on_disk);
+	cprintf("\n");
+	if(print_free_pages) {
+		cprintf("%d / %d = \n", (totalSystemPages - pagesCounter) , totalSystemPages);
+		cprintf("%d# free pages in system\n", (((totalSystemPages - pagesCounter) * 100) / totalSystemPages));
+	}
 }
