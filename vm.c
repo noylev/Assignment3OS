@@ -488,6 +488,24 @@ void swap_page() {
   lcr3(V2P(curproc->pgdir));
 }
 
+void update_access_counters(struct proc *process) {
+  uint page_accesses;
+  pte_t* pte;
+  int bit_comparer = 1;
+  for (int index = 0; index < MAX_PSYC_PAGES; index++) {
+    page_accesses = process->diskPages[index].access_counter;
+    pte = walkpgdir(process->pgdir, (void *) process->diskPages[index].va, 0);
+    page_accesses >>= 1;
+    if (*pte & PTE_A){
+      page_accesses |= (bit_comparer << 31);
+      *pte &= ~PTE_A;
+    }
+    process->diskPages[index].access_counter = page_accesses;
+  }
+  return;
+}
+
+
 //PAGEBREAK!
 // Blank page.
 //PAGEBREAK!

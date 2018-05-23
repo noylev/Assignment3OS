@@ -789,3 +789,14 @@ uint getLap() {
 	}
 	return min_va;
 }
+
+/**
+ * Update number of acccess of the pages for living processes.
+ */
+void update_process_page_accesses() {
+  for (struct proc *curproc = ptable.proc; curproc < &ptable.proc[NPROC]; curproc++) {
+    if (curproc->state == RUNNING || curproc->state == RUNNABLE || curproc->state == SLEEPING) {
+      update_access_counters(curproc);
+    }
+  }
+}

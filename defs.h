@@ -226,6 +226,8 @@ void            clearpteu(pde_t *pgdir, char *uva);
 pte_t*          walkpgdir(pde_t*, const void*, int);
 uint            get_va(void); //added by Noy
 void            swap_page(void); //added by Noy
+void            update_process_page_accesses();
+void            update_access_counters(struct proc *process);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
