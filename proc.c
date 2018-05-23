@@ -764,6 +764,7 @@ void updateLap() {
 		}
 	}
 }
+//return the va of the page with  manage a counter (uint) that is shifted similarly to
 
 uint getLap() {
 	struct proc *curproc = myproc();
@@ -788,6 +789,14 @@ uint getLap() {
 		}
 	}
 	return min_va;
+}
+
+//this function calculate number of bits in page_access we send for LAPA
+int numberOfSetBits(uint i){
+     
+     i = i - ((i >> 1) & 0x55555555);
+     i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
+     return (((i + (i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
 }
 
 /**
