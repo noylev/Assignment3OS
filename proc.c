@@ -850,12 +850,11 @@ uint get_nfua_page_to_swap() {
 
 /// Aging queue BS
 void aging_queue_push_node(int index) {
-  struct agingQueueNode * old_head = aq_head;
   struct agingQueueNode * new_node = (agingQueueNode *) malloc(sizeof(agingQueueNode));
   *new_node->page_index = index;
   *new_node->prev = NULL;
-  *new_node->next = old_head;
-  *old_head->prev = new_node;
+  *new_node->next = aq_head;
+  *aq_head->prev = new_node;
   aq_head = new_node;
 }
 
