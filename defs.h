@@ -136,8 +136,8 @@ void            wakeup(void*);
 void            yield(void);
 /***added by Noy***/
 int            get_physical_pages(void);
-int            get_pages_in_disk_count(void);
-int            getOffsetNotSet(uint);
+int            swap_pages_in_disk_count(void);
+int            get_page_offset_and_unset_page(uint);
 int            get_offset_for_page_insert(uint);
 int            addToPages(uint, struct proc*);
 void           insert_page_va(uint, memory_location);
@@ -225,7 +225,7 @@ int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
 pte_t*          walkpgdir(pde_t*, const void*, int);
 uint            get_va(void); //added by Noy
-void            get_page(void); //added by Noy
+void            swap_page(void); //added by Noy
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

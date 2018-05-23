@@ -556,51 +556,37 @@ procdump(void)
 }
 
 
-int
-get_physical_pages() {
-    struct proc *curproc = myproc();
-    int i;
-    int pagesInRam = 0;
-    for (i = 0; i < curproc->pages.count; ++i){
-        if(curproc->pages.location[i] == PHYSICAL)
-            pagesInRam++;
-    }
-    return pagesInRam;
-}
-
-int
-getDiskPagesCount(){
-    struct proc *curproc = myproc();
-    int i;
-    int pagesInDisk = 0;
-    for (i = 0; i < curproc->pages.count; ++i){
-        if (curproc->pages.location[i] == DISK)
-            pagesInDisk++;
-    }
-    return pagesInDisk;
-}
-
-int getOffsetNotSet(uint va){
+int get_physical_pages() {
   struct proc *curproc = myproc();
-  int ans = -1;
+  int pagesInRam = 0;
+  for (int index = 0; index < curproc->pages.count; ++index){
+    if(curproc->pages.location[index] == PHYSICAL)
+      pagesInRam++;
+  }
+  return pagesInRam;
+}
+
+int get_page_offset_and_unset_page(uint va) {
+  struct proc *curproc = myproc();
+  int result = -1;
+  // Go over all the disk pages.
   for (int index = 0; index <  MAX_TOTAL_PAGES - MAX_PSYC_PAGES; index++) {
     if (
-        (curproc->diskPages[index].elements != 0) &&
-         curproc->diskPages[index].va == va) {
+        curproc->diskPages[index].elements != 0 &&
+        curproc->diskPages[index].va == va) {
       curproc->diskPages[index].elements = 0;
       curproc->pages_on_disk--;
-      ans = PGSIZE * index;
-      return ans;
+      return PGSIZE * index;
     }
   }
   panic("page in disk not found");
-  return ans;
+  return result;
 }
 
 int get_offset_for_page_insert(uint va) {
   struct proc *curproc = myproc();
   for (int index = 0; index <  MAX_TOTAL_PAGES - MAX_PSYC_PAGES; index++) {
-    if(!curproc->diskPages[index].elements) {
+    if (!curproc->diskPages[index].elements) {
       // Found an empty disk page.
       curproc->diskPages[index].elements = 1;
       curproc->diskPages[index].va = va;
@@ -614,21 +600,20 @@ int get_offset_for_page_insert(uint va) {
   return -1;
 }
 
-int
-addToPages(uint va, struct proc* p) {
-    int i,size;
-    for (i = 0; i <  MAX_TOTAL_PAGES - MAX_PSYC_PAGES; i++) {
-        if(!p->diskPages[i].elements) {
-            p->diskPages[i].elements = 1;
-            p->diskPages[i].va = va;
-            p->pages_on_disk++;
-            p->total_pages_on_disk++;
-            size = i * PGSIZE;
-            return size;
-        }
+int addToPages(uint va, struct proc* p) {
+  int i,size;
+  for (i = 0; i <  MAX_TOTAL_PAGES - MAX_PSYC_PAGES; i++) {
+    if(!p->diskPages[i].elements) {
+      p->diskPages[i].elements = 1;
+      p->diskPages[i].va = va;
+      p->pages_on_disk++;
+      p->total_pages_on_disk++;
+      size = i * PGSIZE;
+      return size;
     }
-    panic("no pages to swap");
-    return -1;
+  }
+  panic("no pages to swap");
+  return -1;
 }
 
 /**

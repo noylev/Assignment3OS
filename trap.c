@@ -86,10 +86,11 @@ trap(struct trapframe *tf)
       if(!(PTE_FLAGS(*missing_page) & PTE_PG)) {
           panic("segmentation fault");
       }
-            //if(get_physical_pages() >= MAX_PSYC_PAGES) {
-             //   get_page();
-           // }
-    	int offset = getOffsetNotSet(cr2);
+
+  		if(get_physical_pages() >= MAX_PSYC_PAGES) {
+  		    swap_page();
+  		}
+    	int offset = get_page_offset_and_unset_page(cr2);
     	char* page_mem;
     	page_mem = kalloc();
     	if(page_mem == 0) panic("could not allocate memory for page");

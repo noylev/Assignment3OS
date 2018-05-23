@@ -249,7 +249,7 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   for(; a < newsz; a += PGSIZE){
     if(get_physical_pages() >= MAX_PSYC_PAGES && SELECTION != NONE ) {
       // Too many physical pages.
-      get_page();
+      swap_page();
     }
     mem = kalloc();
     if(mem == 0){
@@ -331,7 +331,7 @@ NewDeallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         *pte = 0;
     }
     else{
-        getOffsetNotSet(a);
+        get_page_offset_and_unset_page(a);
     }
     removePage(a);
     if (SELECTION == SCFIFO) {
@@ -461,7 +461,7 @@ uint get_va() {
   return 0;
 }
 
-void get_page() {
+void swap_page() {
   uint va = get_va();
   struct proc *curproc = myproc();
   // Get the PTE of the virtual address.
