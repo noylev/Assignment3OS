@@ -262,11 +262,12 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     memset(mem, 0, PGSIZE);
     // Task 2: override "out of memory" with write-to-disk.
     if((strcmp(curproc->name, "sh") != 0) && (strcmp(curproc->name, "init") != 0)){
-        switch(SELECTION) {
-          case SCFIFO:
-            enqueueScfifo(a);
-            break;
-        }
+      #if SELECTION==SCFIFO
+        enqueueScfifo(a);
+      #endif
+      #if SELECTION==AQ
+        add_aq_node(a);
+      #endif
     }
     insert_page_va(a, PHYSICAL);
     mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U);
@@ -330,13 +331,11 @@ NewDeallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         pagesCounter--;
         *pte = 0;
     }
-    else{
+    else {
         get_page_offset_and_unset_page(a);
     }
     removePage(a);
-    if (SELECTION == SCFIFO) {
-        removeElement(a);
-    }
+    removeElement(a);
   }
   return newsz;
 }

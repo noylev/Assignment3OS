@@ -107,7 +107,7 @@ exec(char *path, char **argv)
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
   if(strcmp(curproc->name, "init") && strcmp(curproc->name, "sh")) {
-       createSwapFile(curproc);
+    createSwapFile(curproc);
 	}
   switchuvm(curproc);
   freevm(oldpgdir);

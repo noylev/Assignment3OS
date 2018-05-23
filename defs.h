@@ -151,7 +151,7 @@ void		       allocFork(struct proc*);
 int		         getFirstElement(int);
 int		         find_page_index(uint);
 void           removeElement(uint va);
-
+uint           get_nfua_page_to_swap();
 
 // swtch.S
 void            swtch(struct context**, struct context*);

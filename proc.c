@@ -702,10 +702,6 @@ int findFirstInScfifo(int location, int pred) {
 	return location;
 }
 
-/**
- *
- *
- */
 void enqueueScfifo(uint virtual_address) {
   struct proc *curproc = myproc();
 	int last = findFirstInScfifo(curproc->fifoQueue.last, 1);
@@ -734,28 +730,32 @@ uint dequeueScfifo() {
 }
 
 void removeElement(uint va) {
-  #if SELECTION != NONE
-	struct proc *curproc = myproc();
-  #endif
+  #if SELECTION == NONE || SELECTION == LAPA || SELECTION == NFUA
+    return;
+  #else
 
-	#if SELECTION==SCFIFO
-		for(int index = 0; index < MAX_PSYC_PAGES; index++) {
-			if(curproc->fifoQueue.va[index] == va) {
-				updateScfifo(index, va, 0);
-				if(index == curproc->fifoQueue.first) {
-					curproc->fifoQueue.first = (curproc->fifoQueue.first + 1) % MAX_PSYC_PAGES;
-				}
-				if(index == curproc->fifoQueue.last) {
-					curproc->fifoQueue.last = (curproc->fifoQueue.last - 1) % MAX_PSYC_PAGES;
-				}
-				return;
-			}
-		}
-	#else
-    // We shouldn't get here if we don't have a relevant scheme.
-		panic("no element to remove");
-  #endif
+  	struct proc *curproc = myproc();
 
+  	#if SELECTION==SCFIFO
+  		for(int index = 0; index < MAX_PSYC_PAGES; index++) {
+  			if(curproc->fifoQueue.va[index] == va) {
+  				updateScfifo(index, va, 0);
+  				if(index == curproc->fifoQueue.first) {
+  					curproc->fifoQueue.first = (curproc->fifoQueue.first + 1) % MAX_PSYC_PAGES;
+  				}
+  				if(index == curproc->fifoQueue.last) {
+  					curproc->fifoQueue.last = (curproc->fifoQueue.last - 1) % MAX_PSYC_PAGES;
+  				}
+  				return;
+  			}
+  		}
+    #elif SELECTION==LAPA
+      // uhh nada?
+  	#else
+      // We shouldn't get here if we don't have a relevant scheme.
+  		panic("no element to remove");
+    #endif
+  #endif
 }
 
 void updateLap() {
@@ -845,4 +845,29 @@ uint get_nfua_page_to_swap() {
 		}
 	}
 	return min_va;
+}
+
+
+/// Aging queue BS
+void aging_queue_push_node(int index) {
+  struct agingQueueNode * old_head = aq_head;
+  struct agingQueueNode * new_node = (agingQueueNode *) malloc(sizeof(agingQueueNode));
+  *new_node->page_index = index;
+  *new_node->prev = NULL;
+  *new_node->next = old_head;
+  *old_head->prev = new_node;
+  aq_head = new_node;
+}
+
+uint aging_queue_pop_last() {
+  struct proc * curproc = myproc();
+  uint result = curproc->pages[*aq_tail->page_index].va;
+  struct agingQueueNode * old_tail = aq_tail;
+
+  if (aq_tail != aq_head) {
+    aq_tail = old_tail->prev;
+  }
+
+  free(old_tail);
+  return result;
 }
