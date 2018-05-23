@@ -796,7 +796,7 @@ uint getLap() {
                                     actuall_min_access = curproc->pages.accesses[index];
                                     min_va = curproc->pages.va[index];
                                }                            
-                        }                            
+                                                    
                         else{    
                             
 			actuall_min_access = curproc->pages.accesses[index];
