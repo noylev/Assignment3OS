@@ -50,7 +50,7 @@ struct pages {
     int count;
     uint va[MAX_TOTAL_PAGES];
     memory_location location[MAX_TOTAL_PAGES];
-    int accesses[MAX_TOTAL_PAGES];
+    uint accesses[MAX_TOTAL_PAGES];
 };
 
 struct diskPage{
