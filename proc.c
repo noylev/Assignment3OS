@@ -769,11 +769,12 @@ void updateLap() {
 		}
 	}
 }
-//return the va of the page with  manage a counter (uint) that is shifted similarly to
 
+//return the va of the page  with the smallest number of "1"s OR If there are several such pages, the one with the lowest counter should be removed    
 uint getLap() {
 	struct proc *curproc = myproc();
 	int min_access = -1;
+        uint actuall_min_access = 0;
 	int min_va = 0;
   int index;
 
@@ -786,17 +787,27 @@ uint getLap() {
 	}
 	if (min_access == -1) panic("no pages in ram");
 	for (; index < MAX_TOTAL_PAGES; index++) {
-		if (
-        curproc->pages.location[index] == PHYSICAL &&
-        curproc->pages.accesses[index] < min_access) {
-			min_access = curproc->pages.accesses[index];
+            int num_of_bits = numberOfSetBits(curproc->pages.accesses[index]);
+		if (curproc->pages.location[index] == PHYSICAL && num_of_bits <= min_access) { //trying to find the lowest//number of 1's in a page
+                        if((num_of_bits == min_access)&&(curproc->pages.accesses[index]<actuall_min_access)){//If there are several such pages, the one with the lowest counter should be removed                                
+                                    actuall_min_access = curproc->pages.accesses[index];
+                                    min_va = curproc->pages.va[index];
+                               }                            
+                        }                            
+                        else{    
+                            
+			actuall_min_access = curproc->pages.accesses[index];
+                        min_access = num_of_bits;
 			min_va = curproc->pages.va[index];
-		}
+                        
+                        }                          
+		}		
+		
 	}
 	return min_va;
 }
 
-<<<<<<< HEAD
+
 //this function calculate number of bits in page_access we send for LAPA
 int numberOfSetBits(uint i){
      
@@ -804,8 +815,7 @@ int numberOfSetBits(uint i){
      i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
      return (((i + (i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
 }
-=======
->>>>>>> 9ba9b3a096b13916e66d6645f29e357253798b4c
+
 
 /**
  * Update number of acccess of the pages for living processes.
