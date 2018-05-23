@@ -451,21 +451,15 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
  * Gets the next virtual address (according to the selection scheme).
  */
 uint get_va() {
-  #if SELECTION==SCFIFO:
+  #if SELECTION==SCFIFO
       return dequeueScfifo();
   #endif
-  #if SELECTION==LAPA:
+  #if SELECTION==LAPA
       return getLap();
   #endif
 }
 
 void swap_page() {
-
-  if (strcmp(proc->name, "init") == 0 || strcmp(proc->name, "sh") == 0) {
-    proc->pagesinmem++;
-    return;
-  }
-
   struct proc *curproc = myproc();
   uint va = get_va();
 
