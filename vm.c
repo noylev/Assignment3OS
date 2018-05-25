@@ -6,9 +6,12 @@
 #include "mmu.h"
 #include "proc.h"
 #include "elf.h"
+#define BUF_SIZE PGSIZE/4
+#define MAX_POSSIBLE ~0x80000000
+#define ADD_TO_AGE 0x40000000
+#define DEBUG 0
 
-
-int strcmp(const char *p, const char *q) { /*addded by noy ***************/
+int strcmp(const char *p, const char *q) { 
   int answer;
   while(*p && *p == *q){
     p++;
@@ -16,12 +19,12 @@ int strcmp(const char *p, const char *q) { /*addded by noy ***************/
   }
   answer = (uchar)*p - (uchar)*q;
   return answer;
-}/*addded by noy ***************/
+}
 
 
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
-
+int deallocCount = 0;
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
 void
@@ -229,6 +232,226 @@ loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz)
   }
   return 0;
 }
+
+void scRecord(char *va){
+  int i;
+  //TODO delete cprintf("scRecord!\n");
+  for (i = 0; i < MAX_PSYC_PAGES; i++)
+    if (proc->freepages[i].va == (char*)0xffffffff)
+      goto foundrnp;
+  cprintf("panic follows, pid:%d, name:%s\n", proc->pid, proc->name);
+  panic("recordNewPage: no free pages");
+foundrnp:
+  //TODO delete cprintf("found unused page!\n");
+  proc->freepages[i].va = va;
+  proc->freepages[i].next = proc->head;
+  proc->freepages[i].prev = 0;
+  if(proc->head != 0)// old head points back to new head
+    proc->head->prev = &proc->freepages[i];
+  else//head == 0 so first link inserted is also the tail
+    proc->tail = &proc->freepages[i];
+  proc->head = &proc->freepages[i];
+}
+
+void nfuRecord(char *va){
+  int i;
+  
+  for (i = 0; i < MAX_PSYC_PAGES; i++)
+    if (proc->freepages[i].va == (char*)0xffffffff)
+      goto foundrnp;
+  cprintf("panic follows, pid:%d, name:%s\n", proc->pid, proc->name);
+  panic("recordNewPage: no free pages");
+foundrnp:
+ 
+  proc->freepages[i].va = va;
+}
+
+void recordNewPage(char *va) { 
+
+#if SCFIFO  
+  scRecord(va);
+#else
+
+#if NFU
+  nfuRecord(va);
+#endif
+#endif
+
+  curproc->pagesinmem++;
+}
+
+struct freepg *fifoWrite() {
+  int i;
+  struct freepg *link, *l;
+  for (i = 0; i < MAX_PSYC_PAGES; i++){
+    if (curproc->swappedpages[i].va == (char*)0xffffffff)
+      goto foundswappedpageslot;
+  }
+  panic("writePageToSwapFile: FIFO no slot for swapped page");
+foundswappedpageslot:
+  link = curproc->head;
+  if (link == 0)
+    panic("fifoWrite: curproc->head is NULL");
+  if (link->next == 0)
+    panic("fifoWrite: single page in phys mem");
+  // find the before-last link in the used pages list
+  while (link->next->next != 0)
+    link = link->next;
+  l = link->next;
+  link->next = 0;
+
+
+  curproc->swappedpages[i].va = l->va;
+  int num = 0;
+  if ((num = writeToSwapFile(curproc, (char*)PTE_ADDR(l->va), i * PGSIZE, PGSIZE)) == 0)
+    return 0; 
+  pte_t *pte1 = walkpgdir(curproc->pgdir, (void*)l->va, 0);
+  if (!*pte1)
+    panic("writePageToSwapFile: pte1 is empty"); 
+  kfree((char*)PTE_ADDR(P2V_WO(*walkpgdir(curproc->pgdir, l->va, 0))));
+  *pte1 = PTE_W | PTE_U | PTE_PG;
+  ++curproc->totalPagedOutCount;
+  ++curproc->pagesinswapfile;
+  lcr3(v2p(curproc->pgdir));
+  return l;
+}
+
+int checkAccBit(char *va){
+  uint accessed;
+  pte_t *pte = walkpgdir(curproc->pgdir, (void*)va, 0);
+  if (!*pte)
+    panic("checkAccBit: pte1 is empty");
+  accessed = (*pte) & PTE_A;
+  (*pte) &= ~PTE_A;
+  return accessed;
+}
+
+struct freepg *scWrite(char *va) {  
+  int i;
+  struct freepg *mover, *oldTail;
+  for (i = 0; i < MAX_PSYC_PAGES; i++){
+    if (curproc->swappedpages[i].va == (char*)0xffffffff)
+      goto foundswappedpageslot;
+  }
+  panic("writePageToSwapFile: FIFO no slot for swapped page");
+
+foundswappedpageslot:
+    //link = curproc->head;
+  if (curproc->head == 0)
+    panic("scWrite: curproc->head is NULL");
+  if (curproc->head->next == 0)
+    panic("scWrite: single page in phys mem");
+
+  mover = curproc->tail;
+  oldTail = curproc->tail;// to avoid infinite loop if everyone was accessed
+  do{
+    //move mover from tail to head
+    curproc->tail = curproc->tail->prev;
+    curproc->tail->next = 0;
+    mover->prev = 0;
+    mover->next = curproc->head;
+    curproc->head->prev = mover;
+    curproc->head = mover;
+    mover = curproc->tail;
+  }while(checkAccBit(curproc->head->va) && mover != oldTail);
+
+  if(DEBUG){   
+    cprintf("SCFIFO chose to page out page starting at 0x%x \n\n", curproc->head->va);
+  }
+
+  //make the swap
+  curproc->swappedpages[i].va = curproc->head->va;
+  int num = 0;
+  if ((num = writeToSwapFile(curproc, (char*)PTE_ADDR(curproc->head->va), i * PGSIZE, PGSIZE)) == 0)
+    return 0;
+
+  pte_t *pte1 = walkpgdir(curproc->pgdir, (void*)curproc->head->va, 0);
+  if (!*pte1)
+    panic("writePageToSwapFile: pte1 is empty");
+
+  kfree((char*)PTE_ADDR(P2V_WO(*walkpgdir(curproc->pgdir, curproc->head->va, 0))));
+  *pte1 = PTE_W | PTE_U | PTE_PG;
+  ++curproc->totalPagedOutCount;
+  ++curproc->pagesinswapfile;
+  lcr3(v2p(curproc->pgdir));
+  curproc->head->va = va;
+
+  // unnecessary but will do for now
+  return curproc->head;
+}
+
+struct freepg *nfuWrite(char *va) {
+  int i, j;
+  uint maxIndx = -1, maxAge = 0; //MAX_POSSIBLE;
+  struct freepg *chosen;
+
+  for (i = 0; i < MAX_PSYC_PAGES; i++){
+    if (curproc->swappedpages[i].va == (char*)0xffffffff)
+      goto foundswappedpageslot;
+  }
+  panic("writePageToSwapFile: FIFO no slot for swapped page");
+
+foundswappedpageslot:
+  for (j = 0; j < MAX_PSYC_PAGES; j++)
+    if (curproc->freepages[j].va != (char*)0xffffffff){      
+      if (curproc->freepages[j].age > maxAge){
+        maxAge = curproc->freepages[j].age;
+        maxIndx = j;
+      }     
+    }
+
+  if(maxIndx == -1)
+    panic("nfuWrite: no free page to swap???");
+  chosen = &curproc->freepages[maxIndx];
+
+  if(DEBUG){    
+    cprintf("NFU chose to page out page starting at 0x%x \n\n", chosen->va);
+  }
+
+  pte_t *pte1 = walkpgdir(curproc->pgdir, (void*)chosen->va, 0);
+  if (!*pte1)
+    panic("writePageToSwapFile: pte1 is empty");
+  acquire(&tickslock);
+ 
+  if((*pte1) & PTE_A){
+    ++chosen->age;
+    *pte1 &= ~PTE_A;
+    
+  }
+  release(&tickslock);
+
+  //make swap
+  curproc->swappedpages[i].va = chosen->va;
+  int num = 0;
+  if ((num = writeToSwapFile(curproc, (char*)PTE_ADDR(chosen->va), i * PGSIZE, PGSIZE)) == 0)
+    return 0;
+
+  kfree((char*)PTE_ADDR(P2V_WO(*walkpgdir(curproc->pgdir, chosen->va, 0))));
+  *pte1 = PTE_W | PTE_U | PTE_PG;
+  ++curproc->totalPagedOutCount;
+  ++curproc->pagesinswapfile;
+  
+  lcr3(v2p(curproc->pgdir));
+  chosen->va = va;
+
+  // unnecessary but will do for now
+  return chosen;
+}
+
+struct freepg *writePageToSwapFile(char* va) {
+
+#if SCFIFO  
+  return scWrite(va);
+#else
+
+#if NFU
+  return nfuWrite(va);
+#endif
+#endif 
+  return 0;
+}
+
+
 
 // Allocate page tables and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
