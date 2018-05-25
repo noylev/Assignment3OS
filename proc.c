@@ -6,6 +6,9 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "kalloc.h"
+#define ADD_TO_AGE 0x40000000
+#define DEBUG 0
 
 struct {
   struct spinlock lock;
@@ -19,6 +22,38 @@ extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
+
+void
+update_accesses(){
+      struct proc *p;
+  int i;
+  pte_t *pte, *pde, *pgtab;
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if((p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING) && (p->pid > 2)){  
+      for (i = 0; i < MAX_PSYC_PAGES; i++){
+        if (p->freepages[i].va == (char*)0xffffffff)
+          continue;       
+        ++p->freepages[i].age;       
+        ++p->swappedpages[i].age;
+        //only dealing with pages in RAM
+        //might mean we have to check access bit b4 moving a page to disk so we don't miss a tick
+        pde = &p->pgdir[PDX(p->freepages[i].va)];
+        if(*pde & PTE_P){
+          pgtab = (pte_t*)p2v(PTE_ADDR(*pde));
+          pte = &pgtab[PTX(p->freepages[i].va)];
+        }
+        else pte = 0;
+        if(pte)      
+          if(*pte & PTE_A){
+            p->freepages[i].age = 0;       
+          }
+      }
+    }
+  }
+  release(&ptable.lock);
+}
 
 void
 pinit(void)
@@ -305,7 +340,14 @@ exit(void)
       curproc->ofile[fd] = 0;
     }
   }
+  if (removeSwapFile(proc) != 0)
+    panic("exit: error deleting swap file");
 
+  #if TRUE
+  // sending proc as arg just to share func with procdump
+  printProcMemPageInfo(proc);
+  #endif
+  
   begin_op();
   iput(curproc->cwd);
   end_op();

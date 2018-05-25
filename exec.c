@@ -45,6 +45,46 @@ exec(char *path, char **argv)
   if((pgdir = setupkvm()) == 0)
     goto bad;
 
+    // backup and reset proc fields
+#ifndef NONE
+  //TODO delete   cprintf("EXEC: NONE undefined (proc = %s)- backing up page info \n", curproc->name);
+  int pagesinmem = curproc->pagesinmem;
+  int pagesinswapfile = curproc->pagesinswapfile;
+  int totalPageFaultCount = curproc->totalPageFaultCount;
+  int totalPagedOutCount = curproc->totalPagedOutCount;
+  struct freepg freepages[MAX_PSYC_PAGES];
+  struct pgdesc swappedpages[MAX_PSYC_PAGES];
+  for (i = 0; i < MAX_PSYC_PAGES; i++) {
+    freepages[i].va = curproc->freepages[i].va;
+    curproc->freepages[i].va = (char*)0xffffffff;
+    freepages[i].next = curproc->freepages[i].next;
+    curproc->freepages[i].next = 0;
+    freepages[i].prev = curproc->freepages[i].prev;
+    curproc->freepages[i].prev = 0;
+    freepages[i].age = curproc->freepages[i].age;
+    curproc->freepages[i].age = 0;
+    swappedpages[i].age = curproc->swappedpages[i].age;
+    curproc->swappedpages[i].age = 0;
+    swappedpages[i].va = curproc->swappedpages[i].va;
+    curproc->swappedpages[i].va = (char*)0xffffffff;
+    swappedpages[i].swaploc = curproc->swappedpages[i].swaploc;
+    curproc->swappedpages[i].swaploc = 0;
+  }
+  struct freepg *head = curproc->head;
+  struct freepg *tail = curproc->tail;
+  curproc->pagesinmem = 0;
+  curproc->pagesinswapfile = 0;
+  curproc->totalPageFaultCount = 0;
+  curproc->totalPagedOutCount = 0;
+  curproc->head = 0;
+  curproc->tail = 0;
+#endif
+  
+  
+  
+  
+  
+  
   // Load program into memory.
   sz = 0;
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
@@ -106,9 +146,12 @@ exec(char *path, char **argv)
   curproc->sz = sz;
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
-  if(strcmp(curproc->name, "init") && strcmp(curproc->name, "sh")) {
-    createSwapFile(curproc);
-	}
+  
+ // a swap file has been created in fork(), but its content was of the
+  // parent process, and is no longer relevant.
+  removeSwapFile(curproc);
+  createSwapFile(curproc);
+  
   switchuvm(curproc);
   freevm(oldpgdir);
   return 0;
@@ -120,5 +163,24 @@ exec(char *path, char **argv)
     iunlockput(ip);
     end_op();
   }
+  
+  #ifndef NONE
+  proc->pagesinmem = pagesinmem;
+  proc->pagesinswapfile = pagesinswapfile;
+  proc->totalPageFaultCount = totalPageFaultCount;
+  proc->totalPagedOutCount = totalPagedOutCount;
+  proc->head = head;
+  proc->tail = tail;
+  for (i = 0; i < MAX_PSYC_PAGES; i++) {
+    proc->freepages[i].va = freepages[i].va;
+    proc->freepages[i].next = freepages[i].next;
+    proc->freepages[i].prev = freepages[i].prev;
+    proc->freepages[i].age = freepages[i].age;
+    proc->swappedpages[i].age = swappedpages[i].age;
+    proc->swappedpages[i].va = swappedpages[i].va;
+    proc->swappedpages[i].swaploc = swappedpages[i].swaploc;
+  }
+#endif
+  
   return -1;
 }
