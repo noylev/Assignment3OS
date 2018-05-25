@@ -235,34 +235,38 @@ void scRecord(char *va) {
   struct proc *curproc = myproc();
   int i;
   for (i = 0; i < MAX_PSYC_PAGES; i++)
-    if (curproc->freepages[i].va == (char*)0xffffffff)
+    if (curproc->physical_pages[i].va == (char*)0xffffffff)
       goto foundrnp;
   cprintf("panic follows, pid:%d, name:%s\n", curproc->pid, curproc->name);
   panic("recordNewPage: no free pages");
 foundrnp:
 
-  curproc->freepages[i].va = va;
-  curproc->freepages[i].next = curproc->head;
-  curproc->freepages[i].prev = 0;
-  if(curproc->head != 0)// old head points back to new head
-    curproc->head->prev = &curproc->freepages[i];
-  else//head == 0 so first link inserted is also the tail
-    curproc->tail = &curproc->freepages[i];
-  curproc->head = &curproc->freepages[i];
+  curproc->physical_pages[i].va = va;
+  curproc->physical_pages[i].next = curproc->head;
+  curproc->physical_pages[i].prev = 0;
+  if (curproc->head != 0)
+    curproc->head->prev = &curproc->physical_pages[i];
+  else
+    curproc->tail = &curproc->physical_pages[i];
+  curproc->head = &curproc->physical_pages[i];
 }
 
-void nfuRecord(char *va ){
+void record_nfua_lapa(char *va) {
   struct proc *curproc = myproc();
   int i;
 
+  int found = 0;
   for (i = 0; i < MAX_PSYC_PAGES; i++)
-    if (curproc->freepages[i].va == (char*)0xffffffff)
-      goto foundrnp;
-  cprintf("panic follows, pid:%d, name:%s\n", curproc->pid, curproc->name);
-  panic("recordNewPage: no free pages");
-foundrnp:
+    if (curproc->physical_pages[i].va == (char*)0xffffffff) {
+      found = 1;
+      break;
+    }
+  if (!found) {
+    cprintf("panic follows, pid:%d, name:%s\n", curproc->pid, curproc->name);
+    panic("recordNewPage: no free pages");
+  }
 
-  curproc->freepages[i].va = va;
+  curproc->physical_pages[i].va = va;
 }
 
 void recordNewPage(char *va) {
@@ -270,8 +274,8 @@ void recordNewPage(char *va) {
 
   #if SELECTION==SCFIFO
     scRecord(va);
-  #elif SELECTION==NFUA
-    nfuRecord(va);
+  #elif SELECTION==NFUA || SELECTION == LAPA
+    record_nfua_lapa(va);
   #endif
 
   curproc->pagesinmem++;
@@ -325,7 +329,7 @@ int check_access_bit(char *va) {
   return accessed;
 }
 
-struct freepg *scWrite(char *va) {
+struct freepg *write_scfifo(char *va) {
   struct proc *curproc = myproc();
   int i;
   struct freepg *swapper_page, *original_tail;
@@ -338,9 +342,9 @@ struct freepg *scWrite(char *va) {
 foundswappedpageslot:
     //link = curproc->head;
   if (curproc->head == 0)
-    panic("scWrite: curproc->head is NULL");
+    panic("write_scfifo: curproc->head is NULL");
   if (curproc->head->next == 0)
-    panic("scWrite: single page in phys mem");
+    panic("write_scfifo: single page in phys mem");
 
   swapper_page = curproc->tail;
   original_tail = curproc->tail;// to avoid infinite loop if everyone was accessed
@@ -377,7 +381,7 @@ foundswappedpageslot:
   return curproc->head;
 }
 
-struct freepg *nfuWrite(char *va) {
+struct freepg *write_nfua_lapa(char *va) {
   struct proc *curproc = myproc();
   int i, j;
   uint maxIndx = -1, maxAge = 0; //MAX_POSSIBLE;
@@ -391,16 +395,16 @@ struct freepg *nfuWrite(char *va) {
 
 foundswappedpageslot:
   for (j = 0; j < MAX_PSYC_PAGES; j++)
-    if (curproc->freepages[j].va != (char*)0xffffffff){
-      if (curproc->freepages[j].age > maxAge){
-        maxAge = curproc->freepages[j].age;
+    if (curproc->physical_pages[j].va != (char*)0xffffffff){
+      if (curproc->physical_pages[j].age > maxAge){
+        maxAge = curproc->physical_pages[j].age;
         maxIndx = j;
       }
     }
 
   if(maxIndx == -1)
-    panic("nfuWrite: no free page to swap???");
-  chosen = &curproc->freepages[maxIndx];
+    panic("write_nfua_lapa: no free page to swap???");
+  chosen = &curproc->physical_pages[maxIndx];
 
 
   pte_t *pte1 = walkpgdir(curproc->pgdir, (void*)chosen->va, 0);
@@ -436,10 +440,10 @@ foundswappedpageslot:
 struct freepg *writePageToSwapFile(char* va) {
 
   #if SELECTION==SCFIFO
-    return scWrite(va);
+    return write_scfifo(va);
 
-  #elif SELECTION==NFUA
-    return nfuWrite(va);
+  #elif SELECTION==NFUA || SELECTION==LAPA
+    return write_nfua_lapa(va);
   #endif
 
   return 0;
@@ -531,44 +535,44 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         */
 #ifndef NONE
         for (i = 0; i < MAX_PSYC_PAGES; i++) {
-          if (curproc->freepages[i].va == (char*)a)
+          if (curproc->physical_pages[i].va == (char*)a)
             goto founddeallocuvmPTEP;
         }
 
-        panic("deallocuvm: entry not found in proc->freepages");
+        panic("deallocuvm: entry not found in proc->physical_pages");
 founddeallocuvmPTEP:
-        curproc->freepages[i].va = (char*) 0xffffffff;
+        curproc->physical_pages[i].va = (char*) 0xffffffff;
 
 #if SELECTION==SCFIFO
 
 
-        if (curproc->head == &curproc->freepages[i]){
-          curproc->head = curproc->freepages[i].next;
+        if (curproc->head == &curproc->physical_pages[i]){
+          curproc->head = curproc->physical_pages[i].next;
           if(curproc->head != 0)
             curproc->head->prev = 0;
           goto doneLooking;
         }
-        if (curproc->tail == &curproc->freepages[i]){
-          curproc->tail = curproc->freepages[i].prev;
+        if (curproc->tail == &curproc->physical_pages[i]){
+          curproc->tail = curproc->physical_pages[i].prev;
           if(curproc->tail != 0)// should allways be true but lets be extra safe...
             curproc->tail->next = 0;
           goto doneLooking;
         }
         struct freepg *l = curproc->head;
-        while (l->next != 0 && l->next != &curproc->freepages[i]){
+        while (l->next != 0 && l->next != &curproc->physical_pages[i]){
           l = l->next;
         }
-        l->next = curproc->freepages[i].next;
-        if (curproc->freepages[i].next != 0){
-          curproc->freepages[i].next->prev = l;
+        l->next = curproc->physical_pages[i].next;
+        if (curproc->physical_pages[i].next != 0){
+          curproc->physical_pages[i].next->prev = l;
         }
 
 doneLooking:
-        curproc->freepages[i].next = 0;
-        curproc->freepages[i].prev = 0;
+        curproc->physical_pages[i].next = 0;
+        curproc->physical_pages[i].prev = 0;
 
 #elif SELECTION==NFUA
-        curproc->freepages[i].age = 0;
+        curproc->physical_pages[i].age = 0;
 #endif
 #endif
 
@@ -805,12 +809,12 @@ void swap_lapa(uint addr) {
 
   int tempBits = 0;
   for (j = 0; j < MAX_PSYC_PAGES; j++)
-    if (curproc->freepages[j].va != (char*)0xffffffff) {
-      tempBits = numberOfSetBits(curproc->freepages[j].age_bits);
-      if (tempBits <= minAge) {
-        if (!(tempBits == minAge && curproc->freepages[j].age > minAge)) {
-          minAgeBits = numberOfSetBits(curproc->freepages[j].age_bits);
-          minAge = curproc->freepages[j].age;
+    if (curproc->physical_pages[j].va != (char*)0xffffffff) {
+      tempBits = numberOfSetBits(curproc->physical_pages[j].age_bits);
+      if (tempBits <= minAgeBits) {
+        if (!(tempBits == minAgeBits && curproc->physical_pages[j].age > minAge)) {
+          minAgeBits = numberOfSetBits(curproc->physical_pages[j].age_bits);
+          minAge = curproc->physical_pages[j].age;
           minIndex = j;
         }
       }
@@ -818,7 +822,7 @@ void swap_lapa(uint addr) {
 
   if(minIndex == -1)
     panic("swap_nfua: no free page to swap???");
-  chosen = &curproc->freepages[minIndex];
+  chosen = &curproc->physical_pages[minIndex];
 
   //find the address of the page table entry to copy into the swap file
   pte1 = walkpgdir(curproc->pgdir, (void*)chosen->va, 0);
@@ -885,16 +889,16 @@ void swap_nfua(uint addr) {
   struct freepg *chosen;
 
   for (j = 0; j < MAX_PSYC_PAGES; j++)
-    if (curproc->freepages[j].va != (char*)0xffffffff) {
-      if (numberOfSetBits(curproc->freepages[j].age_bits) < minAge) {
-        minAge = numberOfSetBits(curproc->freepages[j].age_bits);
+    if (curproc->physical_pages[j].va != (char*)0xffffffff) {
+      if (numberOfSetBits(curproc->physical_pages[j].age_bits) < minAge) {
+        minAge = numberOfSetBits(curproc->physical_pages[j].age_bits);
         minIndex = j;
       }
     }
 
   if(minIndex == -1)
     panic("swap_nfua: no free page to swap???");
-  chosen = &curproc->freepages[minIndex];
+  chosen = &curproc->physical_pages[minIndex];
 
   //find the address of the page table entry to copy into the swap file
   pte1 = walkpgdir(curproc->pgdir, (void*)chosen->va, 0);

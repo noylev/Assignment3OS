@@ -45,17 +45,17 @@ exec(char *path, char **argv)
   int pagesinswapfile = curproc->pagesinswapfile;
   int totalPageFaultCount = curproc->totalPageFaultCount;
   int totalPagedOutCount = curproc->totalPagedOutCount;
-  struct freepg freepages[MAX_PSYC_PAGES];
+  struct freepg physical_pages[MAX_PSYC_PAGES];
   struct pgdesc swappedpages[MAX_PSYC_PAGES];
   for (i = 0; i < MAX_PSYC_PAGES; i++) {
-    freepages[i].va = curproc->freepages[i].va;
-    curproc->freepages[i].va = (char*)0xffffffff;
-    freepages[i].next = curproc->freepages[i].next;
-    curproc->freepages[i].next = 0;
-    freepages[i].prev = curproc->freepages[i].prev;
-    curproc->freepages[i].prev = 0;
-    freepages[i].age = curproc->freepages[i].age;
-    curproc->freepages[i].age = 0;
+    physical_pages[i].va = curproc->physical_pages[i].va;
+    curproc->physical_pages[i].va = (char*)0xffffffff;
+    physical_pages[i].next = curproc->physical_pages[i].next;
+    curproc->physical_pages[i].next = 0;
+    physical_pages[i].prev = curproc->physical_pages[i].prev;
+    curproc->physical_pages[i].prev = 0;
+    physical_pages[i].age = curproc->physical_pages[i].age;
+    curproc->physical_pages[i].age = 0;
     swappedpages[i].age = curproc->swappedpages[i].age;
     curproc->swappedpages[i].age = 0;
     swappedpages[i].va = curproc->swappedpages[i].va;
@@ -165,10 +165,10 @@ exec(char *path, char **argv)
   proc->head = head;
   proc->tail = tail;
   for (i = 0; i < MAX_PSYC_PAGES; i++) {
-    proc->freepages[i].va = freepages[i].va;
-    proc->freepages[i].next = freepages[i].next;
-    proc->freepages[i].prev = freepages[i].prev;
-    proc->freepages[i].age = freepages[i].age;
+    proc->physical_pages[i].va = physical_pages[i].va;
+    proc->physical_pages[i].next = physical_pages[i].next;
+    proc->physical_pages[i].prev = physical_pages[i].prev;
+    proc->physical_pages[i].age = physical_pages[i].age;
     proc->swappedpages[i].age = swappedpages[i].age;
     proc->swappedpages[i].va = swappedpages[i].va;
     proc->swappedpages[i].swaploc = swappedpages[i].swaploc;

@@ -1,7 +1,7 @@
 // struct for keeping track of the percent of free physical pages
 struct physPagesCounts{
   uint initPagesNo;
-  uint currentFreePagesNo;
+  uint currentphysical_pagesNo;
 };
 
 extern struct physPagesCounts physPagesCounts;

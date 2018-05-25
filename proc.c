@@ -35,24 +35,24 @@ update_accesses() {
     if((p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING) && (p->pid > 2)) {
       for (index = 0; index < MAX_PSYC_PAGES; index++) {
 
-        if (p->freepages[index].va == (char*)0xffffffff) {
+        if (p->physical_pages[index].va == (char*)0xffffffff) {
           // Unassigned free page.
           continue;
         }
 
-        p->freepages[index].age_bits >>= 1;
-        pde = &p->pgdir[PDX(p->freepages[index].va)];
+        p->physical_pages[index].age_bits >>= 1;
+        pde = &p->pgdir[PDX(p->physical_pages[index].va)];
 
         if (*pde & PTE_P) {
           pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
-          pte = &pgtab[PTX(p->freepages[index].va)];
+          pte = &pgtab[PTX(p->physical_pages[index].va)];
         }
         else {
           pte = 0;
         }
         if (pte) {
           if(*pte & PTE_A){
-            p->freepages[index].age++;
+            p->physical_pages[index].age++;
           }
         }
       }
@@ -158,10 +158,10 @@ allocproc(void)
 
     // initialize process's page data
   for (i = 0; i < MAX_PSYC_PAGES; i++) {
-    p->freepages[i].va = (char*)0xffffffff;
-    p->freepages[i].next = 0;
-    p->freepages[i].prev = 0;
-    p->freepages[i].age = 0;
+    p->physical_pages[i].va = (char*)0xffffffff;
+    p->physical_pages[i].next = 0;
+    p->physical_pages[i].prev = 0;
+    p->physical_pages[i].age = 0;
     p->swappedpages[i].age = 0;
     p->swappedpages[i].swaploc = 0;
     p->swappedpages[i].va = (char*)0xffffffff;
@@ -214,8 +214,8 @@ printProcMemPageInfo(struct proc *proc){
   if(DEBUG){
     for (i = 0; i < MAX_PSYC_PAGES; ++i)
     {
-      if(proc->freepages[i].va != (char*)0xffffffff)
-        cprintf("freepages[%d].va = 0x%x \n", i, proc->freepages[i].va);
+      if(proc->physical_pages[i].va != (char*)0xffffffff)
+        cprintf("physical_pages[%d].va = 0x%x \n", i, proc->physical_pages[i].va);
     }
     i = 0;
     l = proc->head;
@@ -349,8 +349,8 @@ fork(void)
   }
 
   for (i = 0; i < MAX_PSYC_PAGES; i++) {
-    np->freepages[i].va = curproc->freepages[i].va;
-    np->freepages[i].age = curproc->freepages[i].age;
+    np->physical_pages[i].va = curproc->physical_pages[i].va;
+    np->physical_pages[i].age = curproc->physical_pages[i].age;
     np->swappedpages[i].age = curproc->swappedpages[i].age;
     np->swappedpages[i].va = curproc->swappedpages[i].va;
     np->swappedpages[i].swaploc = curproc->swappedpages[i].swaploc;
@@ -358,23 +358,23 @@ fork(void)
 
   for (i = 0; i < MAX_PSYC_PAGES; i++) {
     for (j = 0; j < MAX_PSYC_PAGES; ++j) {
-      if(np->freepages[j].va == curproc->freepages[i].next->va) {
-        np->freepages[i].next = &np->freepages[j];
+      if(np->physical_pages[j].va == curproc->physical_pages[i].next->va) {
+        np->physical_pages[i].next = &np->physical_pages[j];
       }
-      if(np->freepages[j].va == curproc->freepages[i].prev->va) {
-        np->freepages[i].prev = &np->freepages[j];
+      if(np->physical_pages[j].va == curproc->physical_pages[i].prev->va) {
+        np->physical_pages[i].prev = &np->physical_pages[j];
       }
     }
 }
 
 #if SCFIFO
   for (i = 0; i < MAX_PSYC_PAGES; i++) {
-    if (curproc->head->va == np->freepages[i].va){
+    if (curproc->head->va == np->physical_pages[i].va){
       //TODO delete       cprintf("\nfork: head copied!\n\n");
-      np->head = &np->freepages[i];
+      np->head = &np->physical_pages[i];
     }
-    if (curproc->tail->va == np->freepages[i].va){
-      np->tail = &np->freepages[i];
+    if (curproc->tail->va == np->physical_pages[i].va){
+      np->tail = &np->physical_pages[i];
       //cprintf("\nfork: head copied!\n\n");
     }
   }
@@ -688,8 +688,8 @@ procdump(void)
   }
 
   // print general (not per-process) physical memory pages info
-  percent = physPagesCounts.currentFreePagesNo * 100 / physPagesCounts.initPagesNo;
-  cprintf("\n\nPercent of free physical pages: %d/%d ~ 0.%d%% \n",  physPagesCounts.currentFreePagesNo,
+  percent = physPagesCounts.currentphysical_pagesNo * 100 / physPagesCounts.initPagesNo;
+  cprintf("\n\nPercent of free physical pages: %d/%d ~ 0.%d%% \n",  physPagesCounts.currentphysical_pagesNo,
                                                                     physPagesCounts.initPagesNo , percent);
 }
 

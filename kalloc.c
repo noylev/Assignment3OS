@@ -81,7 +81,7 @@ kfree(char *v)
   r = (struct run*)v;
   r->next = kmem.freelist;
   kmem.freelist = r;
-  physPagesCounts.currentFreePagesNo++;
+  physPagesCounts.currentphysical_pagesNo++;
   if(kmem.use_lock)
     release(&kmem.lock);
 }
@@ -99,7 +99,7 @@ kalloc(void)
   r = kmem.freelist;
   if(r){
     kmem.freelist = r->next;
-    physPagesCounts.currentFreePagesNo--;
+    physPagesCounts.currentphysical_pagesNo--;
   }
   if(kmem.use_lock)
     release(&kmem.lock);
