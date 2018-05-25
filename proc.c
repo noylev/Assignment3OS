@@ -41,9 +41,6 @@ update_accesses() {
         }
 
         p->freepages[index].age_bits >>= 1;
-
-        //only dealing with pages in RAM
-        //might mean we have to check access bit b4 moving a page to disk so we don't miss a tick
         pde = &p->pgdir[PDX(p->freepages[index].va)];
 
         if (*pde & PTE_P) {

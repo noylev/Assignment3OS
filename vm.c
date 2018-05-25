@@ -715,7 +715,7 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
   return 0;
 }
 
-void scfifo_swap(uint addr) {
+void swap_scfifo(uint addr) {
   struct proc *curproc = myproc();
   int i, j;
   char buf[BUF_SIZE];
@@ -723,9 +723,9 @@ void scfifo_swap(uint addr) {
   struct freepg *swapper_page, *original_tail;
 
   if (curproc->head == 0)
-    panic("scfifo_swap: proc->head is NULL");
+    panic("swap_scfifo: proc->head is NULL");
   if (curproc->head->next == 0)
-    panic("scfifo_swap: single page in phys mem");
+    panic("swap_scfifo: single page in phys mem");
 
   swapper_page = curproc->tail;
   // stop condition.
@@ -753,7 +753,7 @@ void scfifo_swap(uint addr) {
     if (curproc->swappedpages[i].va == (char*)PTE_ADDR(addr))
       goto foundswappedpageslot;
   }
-  panic("scfifo_swap: SCFIFO no slot for swapped page");
+  panic("swap_scfifo: SCFIFO no slot for swapped page");
 
 foundswappedpageslot:
 
@@ -788,7 +788,7 @@ foundswappedpageslot:
 
 }
 
-void nfuSwap(uint addr) {
+void swap_nfua(uint addr) {
   struct proc *curproc = myproc();
   int i, j;
 
@@ -807,13 +807,13 @@ void nfuSwap(uint addr) {
     }
 
   if(maxIndx == -1)
-    panic("nfuSwap: no free page to swap???");
+    panic("swap_nfua: no free page to swap???");
   chosen = &curproc->freepages[maxIndx];
 
   //find the address of the page table entry to copy into the swap file
   pte1 = walkpgdir(curproc->pgdir, (void*)chosen->va, 0);
   if (!*pte1)
-    panic("nfuSwap: pte1 is empty");
+    panic("swap_nfua: pte1 is empty");
 
 //  update accessed bit and age in case it misses a clock tick?
 //  be extra careful not to double add by locking
@@ -829,7 +829,7 @@ void nfuSwap(uint addr) {
     if (curproc->swappedpages[i].va == (char*)PTE_ADDR(addr))
       goto foundswappedpageslot;
   }
-  panic("nfuSwap: no slot for swapped page");
+  panic("swap_nfua: no slot for swapped page");
 
 foundswappedpageslot:
 
@@ -837,7 +837,7 @@ foundswappedpageslot:
   //assign the physical page to addr in the relevant page table
   pte2 = walkpgdir(curproc->pgdir, (void*)addr, 0);
   if (!*pte2)
-    panic("nfuSwap: pte2 is empty");
+    panic("swap_nfua: pte2 is empty");
   //set page table entry
 
   *pte2 = PTE_ADDR(*pte1) | PTE_U | PTE_W | PTE_P;// access bit is zeroed...
@@ -878,9 +878,9 @@ void swap_page(uint addr) {
   }
 
 #if SCFIFO
-  scfifo_swap(addr);
+  swap_scfifo(addr);
 #elif NFU
-  nfuSwap(addr);
+  swap_nfua(addr);
 #endif
 
   lcr3(V2P(curproc->pgdir));
