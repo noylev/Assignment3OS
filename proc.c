@@ -75,6 +75,7 @@ allocproc(void)
 {
     struct proc *p;
     char *sp;
+    int i;
 
     acquire(&ptable.lock);
 
@@ -113,11 +114,23 @@ allocproc(void)
     p->context = (struct context*)sp;
     memset(p->context, 0, sizeof *p->context);
     p->context->eip = (uint)forkret;
-
-    // Task 1 - set initial values.
-    p->page_faults = 0;
-    p->pages_on_disk = 0;
-    p->total_pages_on_disk = 0;
+    
+    // initialize process's page data
+  for (i = 0; i < MAX_PSYC_PAGES; i++) {
+    p->freepages[i].va = (char*)0xffffffff;
+    p->freepages[i].next = 0;
+    p->freepages[i].prev = 0;
+    p->freepages[i].age = 0;
+    p->swappedpages[i].age = 0;
+    p->swappedpages[i].swaploc = 0;
+    p->swappedpages[i].va = (char*)0xffffffff;
+  }
+  p->pagesinmem = 0;
+  p->pagesinswapfile = 0;
+  p->totalPageFaultCount = 0;
+  p->totalPagedOutCount = 0;
+  p->head = 0;
+  p->tail = 0;
 
   return p;
 }
@@ -187,7 +200,7 @@ growproc(int n)
 int
 fork(void)
 {
-  int i, pid;
+  int i,j,pid;
   struct proc *np;
   struct proc *curproc = myproc();
 
@@ -196,17 +209,7 @@ fork(void)
     return -1;
   }
 
-    // Copy process state from proc.
-    // task 1- page information
-    np->pages_on_disk = curproc->pages_on_disk;
-    np->total_pages_on_disk = curproc->total_pages_on_disk;
-    // copy data from original process
-    ;
-    for (int copyPageIndex = 0; copyPageIndex < MAX_TOTAL_PAGES; ++copyPageIndex) {
-      np->pages.va[copyPageIndex] = curproc->pages.va[copyPageIndex];
-      np->pages.location[copyPageIndex] = curproc->pages.location[copyPageIndex];
-      np->pages.count = curproc->pages.count;
-    }
+  
     if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
         kfree(np->kstack);
         np->kstack = 0;
@@ -214,6 +217,8 @@ fork(void)
         pagesCounter--;
         return -1;
     }
+    np->pagesinmem = curproc->pagesinmem;
+    np->pagesinswapfile = curproc->pagesinswapfile;
     np->sz = curproc->sz;
     np->parent = curproc;
     *np->tf = *curproc->tf;
@@ -229,13 +234,54 @@ fork(void)
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
+  
+  createSwapFile(np);
+  char buf[PGSIZE / 2] = "";
+  int offset = 0;
+  int nread = 0;
+  // read the parent's swap file in chunks of size PGDIR/2, otherwise for some
+  // reason, you get "panic acquire" if buf is ~4000 bytes
+  if (strcmp(curproc->name, "init") != 0 && strcmp(curproc->name, "sh") != 0) {
+    while ((nread = readFromSwapFile(curproc, buf, offset, PGSIZE / 2)) != 0) {
+      if (writeToSwapFile(np, buf, offset, nread) == -1)
+        panic("fork: error while writing the parent's swap file to the child");
+      offset += nread;
+    }
+  }
+  
+  for (i = 0; i < MAX_PSYC_PAGES; i++) {
+    np->freepages[i].va = curproc->freepages[i].va;
+    np->freepages[i].age = curproc->freepages[i].age;
+    np->swappedpages[i].age = curproc->swappedpages[i].age;
+    np->swappedpages[i].va = curproc->swappedpages[i].va;
+    np->swappedpages[i].swaploc = curproc->swappedpages[i].swaploc;
+  }
 
+  for (i = 0; i < MAX_PSYC_PAGES; i++) 
+    for (j = 0; j < MAX_PSYC_PAGES; ++j)
+      if(np->freepages[j].va == curproc->freepages[i].next->va)
+        np->freepages[i].next = &np->freepages[j];
+      if(np->freepages[j].va == curproc->freepages[i].prev->va)
+        np->freepages[i].prev = &np->freepages[j];
+
+#if SCFIFO
+  for (i = 0; i < MAX_PSYC_PAGES; i++) {
+    if (curproc->head->va == np->freepages[i].va){
+      //TODO delete       cprintf("\nfork: head copied!\n\n");
+      np->head = &np->freepages[i];
+    }
+    if (curproc->tail->va == np->freepages[i].va){
+      np->tail = &np->freepages[i];
+      //cprintf("\nfork: head copied!\n\n");
+    }
+  }
+#endif
+  
+  
+  
   acquire(&ptable.lock);
-
   np->state = RUNNABLE;
-
   release(&ptable.lock);
-
   return pid;
 }
 
@@ -523,38 +569,81 @@ kill(int pid)
 // Runs when user types ^P on console.
 // No lock to avoid wedging a stuck machine further.
 void
-procdump(void)
-{
+printProcMemPageInfo(struct proc *proc){
   static char *states[] = {
   [UNUSED]    "unused",
   [EMBRYO]    "embryo",
-  [SLEEPING]  "sleep ",
-  [RUNNABLE]  "runble",
-  [RUNNING]   "run   ",
+  [SLEEPING]  "sleeping",
+  [RUNNABLE]  "runnable",
+  [RUNNING]   "running",
   [ZOMBIE]    "zombie"
   };
   int i;
-  struct proc *p;
   char *state;
   uint pc[10];
+  struct freepg *l;
 
+  if(proc->state >= 0 && proc->state < NELEM(states) && states[proc->state])
+    state = states[proc->state];
+  else
+    state = "???";
+
+  // regular xv6 procdump printing
+  cprintf("\npid:%d state:%s name:%s\n", proc->pid, state, proc->name);
+
+  //print out memory pages info:
+  cprintf("No. of pages currently in physical memory: %d,\n", proc->pagesinmem);
+  cprintf("No. of pages currently paged out: %d,\n", proc->pagesinswapfile);
+  cprintf("Total No. of page faults: %d,\n", proc->totalPageFaultCount);
+  cprintf("Total number of paged out pages: %d,\n\n", proc->totalPagedOutCount);
+
+  // regular xv6 procdump printing
+  if(proc->state == SLEEPING){
+    getcallerpcs((uint*)proc->context->ebp+2, pc);
+    for(i=0; i<10 && pc[i] != 0; i++)
+      cprintf(" %p", pc[i]);
+  }
+  if(DEBUG){
+    for (i = 0; i < MAX_PSYC_PAGES; ++i)
+    {
+      if(proc->freepages[i].va != (char*)0xffffffff)
+        cprintf("freepages[%d].va = 0x%x \n", i, proc->freepages[i].va);
+    }
+    i = 0;
+    l = proc->head;
+    if(l == 0)
+      cprintf("proc->head == 0");
+    else {
+      cprintf("proc->head == 0x%x , i=%d\n", l->va, ++i);
+      while(l->next != 0){
+        l = l->next;
+        cprintf("next->va == 0x%x , i=%d\n", l->va, ++i);
+      }
+      cprintf("next link is null, list is finished!\n");
+    }
+    if(proc->tail != 0)
+      cprintf("tail->va == 0x%x \n", proc->tail->va);
+    }
+}
+
+
+void
+procdump(void)
+{
+  int percent;
+  struct proc *p;
+  
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == UNUSED)
       continue;
-    if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
-      state = states[p->state];
-    else
-      state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
-    if(p->state == SLEEPING){
-      getcallerpcs((uint*)p->context->ebp+2, pc);
-      for(i=0; i<10 && pc[i] != 0; i++)
-        cprintf(" %p", pc[i]);
-    }
-    cprintf("\n");
+    printProcMemPageInfo(p);
   }
-}
 
+  // print general (not per-process) physical memory pages info
+  percent = physPagesCounts.currentFreePagesNo * 100 / physPagesCounts.initPagesNo;
+  cprintf("\n\nPercent of free physical pages: %d/%d ~ 0.%d%% \n",  physPagesCounts.currentFreePagesNo,
+                                                                    physPagesCounts.initPagesNo , percent);
+}
 
 int get_physical_pages() {
   struct proc *curproc = myproc();
