@@ -24,31 +24,40 @@ extern void trapret(void);
 static void wakeup1(void *chan);
 
 void
-update_accesses(){
-      struct proc *p;
-  int i;
+update_accesses() {
+  struct proc *p;
+  int index;
   pte_t *pte, *pde, *pgtab;
 
   acquire(&ptable.lock);
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if((p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING) && (p->pid > 2)){
-      for (i = 0; i < MAX_PSYC_PAGES; i++){
-        if (p->freepages[i].va == (char*)0xffffffff)
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+
+    if((p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING) && (p->pid > 2)) {
+      for (index = 0; index < MAX_PSYC_PAGES; index++) {
+
+        if (p->freepages[index].va == (char*)0xffffffff) {
+          // Unassigned free page.
           continue;
-        ++p->freepages[i].age;
-        ++p->swappedpages[i].age;
+        }
+
+        p->freepages[index].age_bits >>= 1;
+
         //only dealing with pages in RAM
         //might mean we have to check access bit b4 moving a page to disk so we don't miss a tick
-        pde = &p->pgdir[PDX(p->freepages[i].va)];
-        if(*pde & PTE_P){
+        pde = &p->pgdir[PDX(p->freepages[index].va)];
+
+        if (*pde & PTE_P) {
           pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
-          pte = &pgtab[PTX(p->freepages[i].va)];
+          pte = &pgtab[PTX(p->freepages[index].va)];
         }
-        else pte = 0;
-        if(pte)
+        else {
+          pte = 0;
+        }
+        if (pte) {
           if(*pte & PTE_A){
-            p->freepages[i].age = 0;
+            p->freepages[index].age++;
           }
+        }
       }
     }
   }

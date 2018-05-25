@@ -314,12 +314,12 @@ foundswappedpageslot:
   return l;
 }
 
-int checkAccBit(char *va) {
+int check_access_bit(char *va) {
   struct proc *curproc = myproc();
   uint accessed;
   pte_t *pte = walkpgdir(curproc->pgdir, (void*)va, 0);
   if (!*pte)
-    panic("checkAccBit: pte1 is empty");
+    panic("check_access_bit: pte1 is empty");
   accessed = (*pte) & PTE_A;
   (*pte) &= ~PTE_A;
   return accessed;
@@ -328,7 +328,7 @@ int checkAccBit(char *va) {
 struct freepg *scWrite(char *va) {
   struct proc *curproc = myproc();
   int i;
-  struct freepg *mover, *oldTail;
+  struct freepg *swapper_page, *original_tail;
   for (i = 0; i < MAX_PSYC_PAGES; i++){
     if (curproc->swappedpages[i].va == (char*)0xffffffff)
       goto foundswappedpageslot;
@@ -342,18 +342,18 @@ foundswappedpageslot:
   if (curproc->head->next == 0)
     panic("scWrite: single page in phys mem");
 
-  mover = curproc->tail;
-  oldTail = curproc->tail;// to avoid infinite loop if everyone was accessed
+  swapper_page = curproc->tail;
+  original_tail = curproc->tail;// to avoid infinite loop if everyone was accessed
   do{
-    //move mover from tail to head
+    //move swapper_page from tail to head
     curproc->tail = curproc->tail->prev;
     curproc->tail->next = 0;
-    mover->prev = 0;
-    mover->next = curproc->head;
-    curproc->head->prev = mover;
-    curproc->head = mover;
-    mover = curproc->tail;
-  }while(checkAccBit(curproc->head->va) && mover != oldTail);
+    swapper_page->prev = 0;
+    swapper_page->next = curproc->head;
+    curproc->head->prev = swapper_page;
+    curproc->head = swapper_page;
+    swapper_page = curproc->tail;
+  }while(check_access_bit(curproc->head->va) && swapper_page != original_tail);
 
 
   //make the swap
@@ -715,47 +715,45 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
   return 0;
 }
 
-void scSwap(uint addr) {
+void scfifo_swap(uint addr) {
   struct proc *curproc = myproc();
   int i, j;
   char buf[BUF_SIZE];
   pte_t *pte1, *pte2;
-  struct freepg *mover, *oldTail;
+  struct freepg *swapper_page, *original_tail;
 
   if (curproc->head == 0)
-    panic("scSwap: proc->head is NULL");
+    panic("scfifo_swap: proc->head is NULL");
   if (curproc->head->next == 0)
-    panic("scSwap: single page in phys mem");
+    panic("scfifo_swap: single page in phys mem");
 
-  mover = curproc->tail;
-  oldTail = curproc->tail;// to avoid infinite loop if somehow everyone was accessed
-  do{
-    //move mover from tail to head
+  swapper_page = curproc->tail;
+  // stop condition.
+  original_tail = curproc->tail;
+  do {
+    // Move swapper_page from tail to head.
     curproc->tail = curproc->tail->prev;
     curproc->tail->next = 0;
-    mover->prev = 0;
-    mover->next = curproc->head;
-    curproc->head->prev = mover;
-    curproc->head = mover;
-    mover = curproc->tail;
-  }while(checkAccBit(curproc->head->va) && mover != oldTail);
+    swapper_page->prev = 0;
+    swapper_page->next = curproc->head;
+    curproc->head->prev = swapper_page;
+    curproc->head = swapper_page;
+    swapper_page = curproc->tail;
+  } while(check_access_bit(curproc->head->va) && swapper_page != original_tail);
 
-  if(DEBUG){
-    //cprintf("\naddress between 0x%x and 0x%x was accessed but was on disk.\n", addr, addr+PGSIZE);
-    cprintf("SCFIFO chose to page out page starting at 0x%x \n\n", curproc->head->va);
+
+  // Get address of the page table entry to copy into the swap file
+  pte1 = walkpgdir(curproc->pgdir, (void*)curproc->head->va, 0);
+  if (!*pte1) {
+    panic("swapFile: SCFIFO pte1 is empty");
   }
 
-  //find the address of the page table entry to copy into the swap file
-  pte1 = walkpgdir(curproc->pgdir, (void*)curproc->head->va, 0);
-  if (!*pte1)
-    panic("swapFile: SCFIFO pte1 is empty");
-
-  //find a swap file page descriptor slot
+  // Find a swap file page descriptor slot.
   for (i = 0; i < MAX_PSYC_PAGES; i++){
     if (curproc->swappedpages[i].va == (char*)PTE_ADDR(addr))
       goto foundswappedpageslot;
   }
-  panic("scSwap: SCFIFO no slot for swapped page");
+  panic("scfifo_swap: SCFIFO no slot for swapped page");
 
 foundswappedpageslot:
 
@@ -793,17 +791,16 @@ foundswappedpageslot:
 void nfuSwap(uint addr) {
   struct proc *curproc = myproc();
   int i, j;
-  uint maxIndx = -1, maxAge = 0;// MAX_POSSIBLE;
+
+  // MAX_POSSIBLE;
+  uint maxIndx = -1, maxAge = 0;
   char buf[BUF_SIZE];
   pte_t *pte1, *pte2;
   struct freepg *chosen;
 
-  //TODO delete   cprintf("MAX_POSSIBLE = %d\n", MAX_POSSIBLE);
-
   for (j = 0; j < MAX_PSYC_PAGES; j++)
-    if (curproc->freepages[j].va != (char*)0xffffffff){
-      //TODO delete      if(curproc->freepages[j].age > 0)      cprintf("i=%d, age=%d, || ", j, curproc->freepages[j].age);
-      if (curproc->freepages[j].age > maxAge){//TODO should be <= not < just wanted to see different indexes than 14
+    if (curproc->freepages[j].va != (char*)0xffffffff) {
+      if (curproc->freepages[j].age > maxAge) {
         maxAge = curproc->freepages[j].age;
         maxIndx = j;
       }
@@ -874,21 +871,18 @@ foundswappedpageslot:
 
 void swap_page(uint addr) {
   struct proc *curproc = myproc();
+
   if (strcmp(curproc->name, "init") == 0 || strcmp(curproc->name, "sh") == 0) {
     curproc->pagesinmem++;
     return;
   }
 
-
 #if SCFIFO
-  scSwap(addr);
-#else
-
-#if NFU
+  scfifo_swap(addr);
+#elif NFU
   nfuSwap(addr);
+#endif
 
-#endif
-#endif
   lcr3(V2P(curproc->pgdir));
   ++curproc->totalPagedOutCount;
 }

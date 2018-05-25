@@ -43,6 +43,7 @@ struct pgdesc {
 struct freepg {
   char *va;
   int age;
+  uint age_bits;
   struct freepg *next;
   struct freepg *prev;
 };
