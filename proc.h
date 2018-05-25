@@ -1,17 +1,34 @@
+
+
+
 // Per-CPU state
 struct cpu {
-  uchar apicid;                // Local APIC ID
+  uchar id;                    // Local APIC ID; index into cpus[] below
   struct context *scheduler;   // swtch() here to enter scheduler
   struct taskstate ts;         // Used by x86 to find stack for interrupt
   struct segdesc gdt[NSEGS];   // x86 global descriptor table
   volatile uint started;       // Has the CPU started?
   int ncli;                    // Depth of pushcli nesting.
   int intena;                  // Were interrupts enabled before pushcli?
-  struct proc *proc;           // The process running on this cpu or null
+
+  // Cpu-local storage variables; see below
+  struct cpu *cpu;
+  struct proc *proc;           // The currently-running process.
 };
 
 extern struct cpu cpus[NCPU];
 extern int ncpu;
+
+// Per-CPU variables, holding pointers to the
+// current cpu and to the current process.
+// The asm suffix tells gcc to use "%gs:0" to refer to cpu
+// and "%gs:4" to refer to proc.  seginit sets up the
+// %gs segment register so that %gs refers to the memory
+// holding those two variables in the local cpu's struct cpu.
+// This is similar to how thread-local variables are implemented
+// in thread libraries such as Linux pthreads.
+extern struct cpu *cpu asm("%gs:0");       // &cpus[cpunum()]
+extern struct proc *proc asm("%gs:4");     // cpus[cpunum()].proc
 
 //PAGEBREAK: 17
 // Saved registers for kernel context switches.
@@ -34,47 +51,18 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
-
-// Process memory is laid out contiguously, low addresses first:
-//   text
-//   original data and bss
-//   fixed-size stack
-//   expandable heap
-
-
-
-/* ====== task1 pages stuff =======  */
-#include "pages_def.h"
-
-struct pages {
-    int count;
-    uint va[MAX_TOTAL_PAGES];
-    memory_location location[MAX_TOTAL_PAGES];
-    uint accesses[MAX_TOTAL_PAGES];
+struct pgdesc {
+  uint swaploc;
+  int age;
+  char *va;
 };
 
-struct diskPage{
-    char elements;
-    uint va;
+struct freepg {
+  char *va;
+  int age;
+  struct freepg *next;
+  struct freepg *prev;
 };
-
-
-struct fifoQueue {
-	char elements[MAX_PSYC_PAGES];
-	uint va[MAX_PSYC_PAGES];
-	int first;
-	int last;
-	int count;
-};
-
-struct agingQueueNode {
-  int page_index;
-  struct agingQueueNode * prev;
-  struct agingQueueNode * next;
-};
-
-struct agingQueueNode * aq_head;
-struct agingQueueNode * aq_tail;
 
 // Per-process state
 struct proc {
@@ -93,19 +81,20 @@ struct proc {
   char name[16];               // Process name (debugging)
 
   //Swap file. must initiate with create swap file
-  struct file *swapFile;      //page file
+  struct file *swapFile;			//page file
 
-  // === Task 1 pages stuff. ===
-  // Proc's memory pages.
-  struct pages pages;
-  // Pages on the disk
-  struct diskPage diskPages[MAX_TOTAL_PAGES - MAX_PSYC_PAGES];
-  // number of page faults
-  uint page_faults;
-  // number of pages in the disk
-  uint pages_on_disk;
-  // total number of paged out pages
-  uint total_pages_on_disk;
-  // ====================== TASK 2
-  struct fifoQueue fifoQueue;
+  int pagesinmem;             // No. of pages in physical memory
+  int pagesinswapfile;        // No. of pages in swap file
+  int totalPageFaultCount;    // Total number of page faults for this process
+  int totalPagedOutCount;     // Total number of pages that were placed in the swap file
+  struct freepg freepages[MAX_PSYC_PAGES];  // Pre-allocated space for the pages in physical memory linked list
+  struct pgdesc swappedpages[MAX_PSYC_PAGES];// Pre-allocated space for the pages in swap file array
+  struct freepg *head;        // Head of the pages in physical memory linked list
+  struct freepg *tail;        // End of the pages in physical memory linked list
 };
+
+// Process memory is laid out contiguously, low addresses first:
+//   text
+//   original data and bss
+//   fixed-size stack
+//   expandable heap
