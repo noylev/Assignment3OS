@@ -193,7 +193,6 @@ void            uartputc(int);
 // vm.c
 int             strcmp(const char*, const char*); //added by Noy
 void            seginit(void);
-int             NewDeallocuvm(pde_t*, uint, uint);
 void            kvmalloc(void);
 pde_t*          setupkvm(void);
 char*           uva2ka(pde_t*, char*);

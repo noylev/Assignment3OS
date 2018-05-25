@@ -507,6 +507,7 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 int
 deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 {
+  struct proc *curproc = myproc();
   pte_t *pte;
   uint a, pa;
   int i;
@@ -715,6 +716,7 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 }
 
 void scSwap(uint addr) {
+  struct proc *curproc = myproc();
   int i, j;
   char buf[BUF_SIZE];
   pte_t *pte1, *pte2;
@@ -789,6 +791,7 @@ foundswappedpageslot:
 }
 
 void nfuSwap(uint addr) {
+  struct proc *curproc = myproc();
   int i, j;
   uint maxIndx = -1, maxAge = 0;// MAX_POSSIBLE;
   char buf[BUF_SIZE];
@@ -810,17 +813,11 @@ void nfuSwap(uint addr) {
     panic("nfuSwap: no free page to swap???");
   chosen = &curproc->freepages[maxIndx];
 
-  if(DEBUG){
-    //cprintf("\naddress between 0x%x and 0x%x was accessed but was on disk.\n", addr, addr+PGSIZE);
-    cprintf("NFU chose to page out page starting at 0x%x \n\n", chosen->va);
-  }
-
   //find the address of the page table entry to copy into the swap file
   pte1 = walkpgdir(curproc->pgdir, (void*)chosen->va, 0);
   if (!*pte1)
     panic("nfuSwap: pte1 is empty");
 
-//  TODO verify: b4 accessing by writing to file,
 //  update accessed bit and age in case it misses a clock tick?
 //  be extra careful not to double add by locking
   acquire(&tickslock);
@@ -875,7 +872,8 @@ foundswappedpageslot:
   chosen->age = 0;
 }
 
-void swapPages(uint addr) {
+void swap_page(uint addr) {
+  struct proc *curproc = myproc();
   if (strcmp(curproc->name, "init") == 0 || strcmp(curproc->name, "sh") == 0) {
     curproc->pagesinmem++;
     return;
@@ -883,7 +881,6 @@ void swapPages(uint addr) {
 
 
 #if SCFIFO
-  //cprintf("swapPages: calling scSwap\n");
   scSwap(addr);
 #else
 
@@ -892,7 +889,7 @@ void swapPages(uint addr) {
 
 #endif
 #endif
-  lcr3(v2p(curproc->pgdir));
+  lcr3(V2P(curproc->pgdir));
   ++curproc->totalPagedOutCount;
 }
 
