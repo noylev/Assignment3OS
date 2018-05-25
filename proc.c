@@ -31,23 +31,23 @@ update_accesses(){
 
   acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if((p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING) && (p->pid > 2)){  
+    if((p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING) && (p->pid > 2)){
       for (i = 0; i < MAX_PSYC_PAGES; i++){
         if (p->freepages[i].va == (char*)0xffffffff)
-          continue;       
-        ++p->freepages[i].age;       
+          continue;
+        ++p->freepages[i].age;
         ++p->swappedpages[i].age;
         //only dealing with pages in RAM
         //might mean we have to check access bit b4 moving a page to disk so we don't miss a tick
         pde = &p->pgdir[PDX(p->freepages[i].va)];
         if(*pde & PTE_P){
-          pgtab = (pte_t*)p2v(PTE_ADDR(*pde));
+          pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
           pte = &pgtab[PTX(p->freepages[i].va)];
         }
         else pte = 0;
-        if(pte)      
+        if(pte)
           if(*pte & PTE_A){
-            p->freepages[i].age = 0;       
+            p->freepages[i].age = 0;
           }
       }
     }
@@ -149,7 +149,7 @@ allocproc(void)
     p->context = (struct context*)sp;
     memset(p->context, 0, sizeof *p->context);
     p->context->eip = (uint)forkret;
-    
+
     // initialize process's page data
   for (i = 0; i < MAX_PSYC_PAGES; i++) {
     p->freepages[i].va = (char*)0xffffffff;
@@ -168,6 +168,64 @@ allocproc(void)
   p->tail = 0;
 
   return p;
+}
+
+void
+printProcMemPageInfo(struct proc *proc){
+  static char *states[] = {
+  [UNUSED]    "unused",
+  [EMBRYO]    "embryo",
+  [SLEEPING]  "sleeping",
+  [RUNNABLE]  "runnable",
+  [RUNNING]   "running",
+  [ZOMBIE]    "zombie"
+  };
+  int i;
+  char *state;
+  uint pc[10];
+  struct freepg *l;
+
+  if(proc->state >= 0 && proc->state < NELEM(states) && states[proc->state])
+    state = states[proc->state];
+  else
+    state = "???";
+
+  // regular xv6 procdump printing
+  cprintf("\npid:%d state:%s name:%s\n", proc->pid, state, proc->name);
+
+  //print out memory pages info:
+  cprintf("No. of pages currently in physical memory: %d,\n", proc->pagesinmem);
+  cprintf("No. of pages currently paged out: %d,\n", proc->pagesinswapfile);
+  cprintf("Total No. of page faults: %d,\n", proc->totalPageFaultCount);
+  cprintf("Total number of paged out pages: %d,\n\n", proc->totalPagedOutCount);
+
+  // regular xv6 procdump printing
+  if(proc->state == SLEEPING){
+    getcallerpcs((uint*)proc->context->ebp+2, pc);
+    for(i=0; i<10 && pc[i] != 0; i++)
+      cprintf(" %p", pc[i]);
+  }
+  if(DEBUG){
+    for (i = 0; i < MAX_PSYC_PAGES; ++i)
+    {
+      if(proc->freepages[i].va != (char*)0xffffffff)
+        cprintf("freepages[%d].va = 0x%x \n", i, proc->freepages[i].va);
+    }
+    i = 0;
+    l = proc->head;
+    if(l == 0)
+      cprintf("proc->head == 0");
+    else {
+      cprintf("proc->head == 0x%x , i=%d\n", l->va, ++i);
+      while(l->next != 0){
+        l = l->next;
+        cprintf("next->va == 0x%x , i=%d\n", l->va, ++i);
+      }
+      cprintf("next link is null, list is finished!\n");
+    }
+    if(proc->tail != 0)
+      cprintf("tail->va == 0x%x \n", proc->tail->va);
+    }
 }
 
 //PAGEBREAK: 32
@@ -244,7 +302,7 @@ fork(void)
     return -1;
   }
 
-  
+
     if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
         kfree(np->kstack);
         np->kstack = 0;
@@ -269,7 +327,7 @@ fork(void)
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
-  
+
   createSwapFile(np);
   char buf[PGSIZE / 2] = "";
   int offset = 0;
@@ -283,7 +341,7 @@ fork(void)
       offset += nread;
     }
   }
-  
+
   for (i = 0; i < MAX_PSYC_PAGES; i++) {
     np->freepages[i].va = curproc->freepages[i].va;
     np->freepages[i].age = curproc->freepages[i].age;
@@ -292,12 +350,16 @@ fork(void)
     np->swappedpages[i].swaploc = curproc->swappedpages[i].swaploc;
   }
 
-  for (i = 0; i < MAX_PSYC_PAGES; i++) 
-    for (j = 0; j < MAX_PSYC_PAGES; ++j)
-      if(np->freepages[j].va == curproc->freepages[i].next->va)
+  for (i = 0; i < MAX_PSYC_PAGES; i++) {
+    for (j = 0; j < MAX_PSYC_PAGES; ++j) {
+      if(np->freepages[j].va == curproc->freepages[i].next->va) {
         np->freepages[i].next = &np->freepages[j];
-      if(np->freepages[j].va == curproc->freepages[i].prev->va)
+      }
+      if(np->freepages[j].va == curproc->freepages[i].prev->va) {
         np->freepages[i].prev = &np->freepages[j];
+      }
+    }
+}
 
 #if SCFIFO
   for (i = 0; i < MAX_PSYC_PAGES; i++) {
@@ -311,9 +373,9 @@ fork(void)
     }
   }
 #endif
-  
-  
-  
+
+
+
   acquire(&ptable.lock);
   np->state = RUNNABLE;
   release(&ptable.lock);
@@ -340,14 +402,14 @@ exit(void)
       curproc->ofile[fd] = 0;
     }
   }
-  if (removeSwapFile(proc) != 0)
+  if (removeSwapFile(curproc) != 0)
     panic("exit: error deleting swap file");
 
   #if TRUE
   // sending proc as arg just to share func with procdump
-  printProcMemPageInfo(proc);
+  printProcMemPageInfo(curproc);
   #endif
-  
+
   begin_op();
   iput(curproc->cwd);
   end_op();
@@ -379,7 +441,7 @@ int
 wait(void)
 {
   struct proc *p;
-  int havekids, pid, pageIndex;
+  int havekids, pid;
   struct proc *curproc = myproc();
 
   acquire(&ptable.lock);
@@ -402,9 +464,6 @@ wait(void)
         p->name[0] = 0;
         p->killed = 0;
         p->state = UNUSED;
-        for (pageIndex = 0; pageIndex < MAX_TOTAL_PAGES - MAX_PSYC_PAGES; pageIndex++) {
-                p->diskPages[pageIndex].elements = 0;
-        }
         release(&ptable.lock);
         return pid;
       }
@@ -611,70 +670,11 @@ kill(int pid)
 // Runs when user types ^P on console.
 // No lock to avoid wedging a stuck machine further.
 void
-printProcMemPageInfo(struct proc *proc){
-  static char *states[] = {
-  [UNUSED]    "unused",
-  [EMBRYO]    "embryo",
-  [SLEEPING]  "sleeping",
-  [RUNNABLE]  "runnable",
-  [RUNNING]   "running",
-  [ZOMBIE]    "zombie"
-  };
-  int i;
-  char *state;
-  uint pc[10];
-  struct freepg *l;
-
-  if(proc->state >= 0 && proc->state < NELEM(states) && states[proc->state])
-    state = states[proc->state];
-  else
-    state = "???";
-
-  // regular xv6 procdump printing
-  cprintf("\npid:%d state:%s name:%s\n", proc->pid, state, proc->name);
-
-  //print out memory pages info:
-  cprintf("No. of pages currently in physical memory: %d,\n", proc->pagesinmem);
-  cprintf("No. of pages currently paged out: %d,\n", proc->pagesinswapfile);
-  cprintf("Total No. of page faults: %d,\n", proc->totalPageFaultCount);
-  cprintf("Total number of paged out pages: %d,\n\n", proc->totalPagedOutCount);
-
-  // regular xv6 procdump printing
-  if(proc->state == SLEEPING){
-    getcallerpcs((uint*)proc->context->ebp+2, pc);
-    for(i=0; i<10 && pc[i] != 0; i++)
-      cprintf(" %p", pc[i]);
-  }
-  if(DEBUG){
-    for (i = 0; i < MAX_PSYC_PAGES; ++i)
-    {
-      if(proc->freepages[i].va != (char*)0xffffffff)
-        cprintf("freepages[%d].va = 0x%x \n", i, proc->freepages[i].va);
-    }
-    i = 0;
-    l = proc->head;
-    if(l == 0)
-      cprintf("proc->head == 0");
-    else {
-      cprintf("proc->head == 0x%x , i=%d\n", l->va, ++i);
-      while(l->next != 0){
-        l = l->next;
-        cprintf("next->va == 0x%x , i=%d\n", l->va, ++i);
-      }
-      cprintf("next link is null, list is finished!\n");
-    }
-    if(proc->tail != 0)
-      cprintf("tail->va == 0x%x \n", proc->tail->va);
-    }
-}
-
-
-void
 procdump(void)
 {
   int percent;
   struct proc *p;
-  
+
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == UNUSED)
       continue;
@@ -687,260 +687,6 @@ procdump(void)
                                                                     physPagesCounts.initPagesNo , percent);
 }
 
-int get_physical_pages() {
-  struct proc *curproc = myproc();
-  int pagesInRam = 0;
-  for (int index = 0; index < curproc->pages.count; ++index){
-    if(curproc->pages.location[index] == PHYSICAL)
-      pagesInRam++;
-  }
-  return pagesInRam;
-}
-
-int get_page_offset_and_unset_page(uint va) {
-  struct proc *curproc = myproc();
-  int result = -1;
-  // Go over all the disk pages.
-  for (int index = 0; index <  MAX_TOTAL_PAGES - MAX_PSYC_PAGES; index++) {
-    if (
-        curproc->diskPages[index].elements != 0 &&
-        curproc->diskPages[index].va == va) {
-      curproc->diskPages[index].elements = 0;
-      curproc->pages_on_disk--;
-      return PGSIZE * index;
-    }
-  }
-  panic("page in disk not found");
-  return result;
-}
-
-int get_offset_for_page_insert(uint va) {
-  struct proc *curproc = myproc();
-  for (int index = 0; index <  MAX_TOTAL_PAGES - MAX_PSYC_PAGES; index++) {
-    if (!curproc->diskPages[index].elements) {
-      // Found an empty disk page.
-      curproc->diskPages[index].elements = 1;
-      curproc->diskPages[index].va = va;
-      curproc->pages_on_disk++;
-      curproc->total_pages_on_disk++;
-      // Return memory offset to page's start.
-      return index * PGSIZE;
-    }
-  }
-  panic("no available page to swap");
-  return -1;
-}
-
-int addToPages(uint va, struct proc* p) {
-  int i,size;
-  for (i = 0; i <  MAX_TOTAL_PAGES - MAX_PSYC_PAGES; i++) {
-    if(!p->diskPages[i].elements) {
-      p->diskPages[i].elements = 1;
-      p->diskPages[i].va = va;
-      p->pages_on_disk++;
-      p->total_pages_on_disk++;
-      size = i * PGSIZE;
-      return size;
-    }
-  }
-  panic("no pages to swap");
-  return -1;
-}
-
-/**
- * Find page in current porcess' pages list.
- * @param  uint va
- *  virtual address of the page.
- * @return int index
- *  Index of the page in the pages list, -1 if not found.
- */
-int find_page_index(uint va){
-  struct proc *curproc = myproc();
-  for (int index = 0; index < curproc->pages.count; index++) {
-      if(curproc->pages.va[index] == va) {
-        return index;
-      }
-  }
-  return -1;
-}
-
-void insert_page_va(uint va , memory_location where) {
-  struct proc *curproc = myproc();
-
-  int index = find_page_index(va);
-  if(index == -1) {
-    // Add a new page.
-    curproc->pages.count++;
-    curproc->pages.va[curproc->pages.count] = va;
-  }
-  // Add the page to the requested location.
-  curproc->pages.location[index] = where;
-}
-
-void updateScfifo(int index, uint va, int addition) {
-  struct proc *curproc = myproc();
-
-	switch(addition) {
-  	case 1:
-  		curproc->fifoQueue.va[index] = va;
-  		curproc->fifoQueue.elements[index] = addition;
-  		curproc->fifoQueue.count++;
-  		break;
-  	case 0:
-  		curproc->fifoQueue.va[index] = addition;
-  		curproc->fifoQueue.elements[index] = addition;
-  		curproc->fifoQueue.count--;
-  		break;
-  	default:
-  		panic("error");
-	}
-}
-
-/**
- * Removes a page from the current process' pages array.
- * @param va Virtual address of the page.
- */
-void removePage(uint va) {
-  struct proc *curproc = myproc();
-  int index = find_page_index(va);
-
-  if(index == -1) {
-    // Page not found.
-    panic("Page not found - cannot remove page");
-    return;
-  }
-
-  curproc->pages.count--;
-  curproc->pages.va[index] = 0;
-  curproc->pages.location[index] = BLANK;
-  #if SELECTION == LAPA
-  curproc->pages.accesses[index] = 0xFFFFFFFF;
-  #else
-  curproc->pages.accesses[index] = 0;
-  #endif
-}
-
-/**
- * Find
- */
-int findFirstInScfifo(int location, int pred) {
-  struct proc *curproc = myproc();
-
-	while (curproc->fifoQueue.elements[location] == pred) {
-		location = (location + 1) % MAX_PSYC_PAGES;
-	}
-
-	return location;
-}
-
-void enqueueScfifo(uint virtual_address) {
-  struct proc *curproc = myproc();
-	int last = findFirstInScfifo(curproc->fifoQueue.last, 1);
-	updateScfifo(last, virtual_address, 1);
-	last = (last + 1) % MAX_PSYC_PAGES;
-}
-
-uint dequeueScfifo() {
-  struct proc *curproc = myproc();
-	int first;
-	uint va;
-	pte_t* page;
-	do{
-		first = findFirstInScfifo(curproc->fifoQueue.first,0);
-		va = curproc->fifoQueue.va[first];
-		page = walkpgdir(curproc->pgdir, (void*)va, 0);
-		if(PTE_FLAGS(*page) & PTE_A) {
-			*page &= ~PTE_A;
-			first = (first + 1) % MAX_PSYC_PAGES;
-			continue;
-		}
-		updateScfifo(first, va, 0);
-		curproc->fifoQueue.first = (first + 1) % MAX_PSYC_PAGES;
-		return va;
-	} while(1);
-}
-
-void removeElement(uint va) {
-  #if SELECTION == NONE || SELECTION == LAPA || SELECTION == NFUA
-    return;
-  #else
-
-  	struct proc *curproc = myproc();
-
-  	#if SELECTION==SCFIFO
-  		for(int index = 0; index < MAX_PSYC_PAGES; index++) {
-  			if(curproc->fifoQueue.va[index] == va) {
-  				updateScfifo(index, va, 0);
-  				if(index == curproc->fifoQueue.first) {
-  					curproc->fifoQueue.first = (curproc->fifoQueue.first + 1) % MAX_PSYC_PAGES;
-  				}
-  				if(index == curproc->fifoQueue.last) {
-  					curproc->fifoQueue.last = (curproc->fifoQueue.last - 1) % MAX_PSYC_PAGES;
-  				}
-  				return;
-  			}
-  		}
-    #elif SELECTION==LAPA
-      // uhh nada?
-  	#else
-      // We shouldn't get here if we don't have a relevant scheme.
-  		panic("no element to remove");
-    #endif
-  #endif
-}
-
-void updateLap() {
-	struct proc *curproc = myproc();
-	pte_t* page;
-	for(int index = 0; index < MAX_TOTAL_PAGES; index++) {
-		if(curproc->pages.location[index] == PHYSICAL) {
-			page = walkpgdir(curproc->pgdir, (void*) curproc->pages.va[index], 0);
-			curproc->pages.accesses[index] >>= 0;
-			if(PTE_FLAGS(*page) & PTE_A) {
-			  curproc->pages.accesses[index] |= (1 << 31);;
-				*page &= ~PTE_A;
-			}
-		}
-	}
-}
-
-//return the va of the page  with the smallest number of "1"s OR If there are several such pages, the one with the lowest counter should be removed    
-uint getLap() {
-	struct proc *curproc = myproc();
-	int min_access = -1;
-        uint actuall_min_access = 0;
-	int min_va = 0;
-  int index;
-
-	for (index = 0; index < MAX_TOTAL_PAGES; index++) {
-		if (curproc->pages.location[index] == PHYSICAL) {
-			min_access = curproc->pages.accesses[index];
-			min_va = curproc->pages.va[index];
-			break;
-		}
-	}
-	if (min_access == -1) panic("no pages in ram");
-	for (; index < MAX_TOTAL_PAGES; index++) {
-            int num_of_bits = numberOfSetBits(curproc->pages.accesses[index]);
-		if (curproc->pages.location[index] == PHYSICAL && num_of_bits <= min_access) { //trying to find the lowest//number of 1's in a page
-                        if((num_of_bits == min_access)&&(curproc->pages.accesses[index]<actuall_min_access)){//If there are several such pages, the one with the lowest counter should be removed                                
-                                    actuall_min_access = curproc->pages.accesses[index];
-                                    min_va = curproc->pages.va[index];
-                               }                            
-                                                    
-                        else{    
-                            
-			actuall_min_access = curproc->pages.accesses[index];
-                        min_access = num_of_bits;
-			min_va = curproc->pages.va[index];
-                        
-                        }                          
-		}		
-		
-	}
-	return min_va;
-}
-
 
 //this function calculate number of bits in page_access we send for LAPA
 int numberOfSetBits(uint i){
@@ -950,67 +696,31 @@ int numberOfSetBits(uint i){
      return (((i + (i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
 }
 
-
-/**
- * Update number of acccess of the pages for living processes.
- */
-void update_process_page_accesses() {
-  for (struct proc *curproc = ptable.proc; curproc < &ptable.proc[NPROC]; curproc++) {
-    if (curproc->state == RUNNING || curproc->state == RUNNABLE || curproc->state == SLEEPING) {
-      update_access_counters(curproc);
-    }
-  }
-}
-
-
-/**
- * Get page to swap by NFUA selection scheme.
- */
-uint get_nfua_page_to_swap() {
-	struct proc *curproc = myproc();
-	int min_access = -1;
-	int min_va = 0;
-  int index;
-
-	for (index = 0; index < MAX_TOTAL_PAGES; index++) {
-		if (curproc->pages.location[index] == PHYSICAL) {
-			min_access = curproc->pages.accesses[index];
-			min_va = curproc->pages.va[index];
-			break;
-		}
-	}
-	if (min_access == -1) panic("no pages in ram");
-	for (; index < MAX_TOTAL_PAGES; index++) {
-		if (
-        curproc->pages.location[index] == PHYSICAL &&
-        curproc->pages.accesses[index] < min_access) {
-			min_access = curproc->pages.accesses[index];
-			min_va = curproc->pages.va[index];
-		}
-	}
-	return min_va;
-}
-
-
-/// Aging queue BS
-void aging_queue_push_node(int index) {
-  struct agingQueueNode * new_node = (agingQueueNode *) malloc(sizeof(agingQueueNode));
-  *new_node->page_index = index;
-  *new_node->prev = NULL;
-  *new_node->next = aq_head;
-  *aq_head->prev = new_node;
-  aq_head = new_node;
-}
-
-uint aging_queue_pop_last() {
-  struct proc * curproc = myproc();
-  uint result = curproc->pages[*aq_tail->page_index].va;
-  struct agingQueueNode * old_tail = aq_tail;
-
-  if (aq_tail != aq_head) {
-    aq_tail = old_tail->prev;
-  }
-
-  free(old_tail);
-  return result;
-}
+//
+// /**
+//  * Get page to swap by NFUA selection scheme.
+//  */
+// uint get_nfua_page_to_swap() {
+// 	struct proc *curproc = myproc();
+// 	int min_access = -1;
+// 	int min_va = 0;
+//   int index;
+//
+// 	for (index = 0; index < MAX_TOTAL_PAGES; index++) {
+// 		if (curproc->pages.location[index] == PHYSICAL) {
+// 			min_access = curproc->pages.accesses[index];
+// 			min_va = curproc->pages.va[index];
+// 			break;
+// 		}
+// 	}
+// 	if (min_access == -1) panic("no pages in ram");
+// 	for (; index < MAX_TOTAL_PAGES; index++) {
+// 		if (
+//         curproc->pages.location[index] == PHYSICAL &&
+//         curproc->pages.accesses[index] < min_access) {
+// 			min_access = curproc->pages.accesses[index];
+// 			min_va = curproc->pages.va[index];
+// 		}
+// 	}
+// 	return min_va;
+// }

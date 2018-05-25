@@ -28,13 +28,6 @@ exec(char *path, char **argv)
   }
   ilock(ip);
   pgdir = 0;
-/*----------------------added by noy*/
-  curproc->page_faults = 0;
-  curproc->pages_on_disk = 0;
-  curproc->total_pages_on_disk = 0;
-  //resetAllFields();
-  removeSwapFile(curproc);
-  /*--------------------added by noy*/
 
   // Check ELF header
   if(readi(ip, (char*)&elf, 0, sizeof(elf)) != sizeof(elf))
@@ -79,12 +72,12 @@ exec(char *path, char **argv)
   curproc->head = 0;
   curproc->tail = 0;
 #endif
-  
-  
-  
-  
-  
-  
+
+
+
+
+
+
   // Load program into memory.
   sz = 0;
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
@@ -146,12 +139,12 @@ exec(char *path, char **argv)
   curproc->sz = sz;
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
-  
+
  // a swap file has been created in fork(), but its content was of the
   // parent process, and is no longer relevant.
   removeSwapFile(curproc);
   createSwapFile(curproc);
-  
+
   switchuvm(curproc);
   freevm(oldpgdir);
   return 0;
@@ -163,7 +156,7 @@ exec(char *path, char **argv)
     iunlockput(ip);
     end_op();
   }
-  
+
   #ifndef NONE
   proc->pagesinmem = pagesinmem;
   proc->pagesinswapfile = pagesinswapfile;
@@ -181,6 +174,6 @@ exec(char *path, char **argv)
     proc->swappedpages[i].swaploc = swappedpages[i].swaploc;
   }
 #endif
-  
+
   return -1;
 }
