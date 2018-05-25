@@ -268,9 +268,9 @@ foundrnp:
 void recordNewPage(char *va) {
   struct proc *curproc = myproc();
 
-  #if SCFIFO
+  #if SELECTION==SCFIFO
     scRecord(va);
-  #elif NFU
+  #elif SELECTION==NFUA
     nfuRecord(va);
   #endif
 
@@ -435,10 +435,10 @@ foundswappedpageslot:
 
 struct freepg *writePageToSwapFile(char* va) {
 
-  #if SCFIFO
+  #if SELECTION==SCFIFO
     return scWrite(va);
 
-  #elif NFU
+  #elif SELECTION==NFUA
     return nfuWrite(va);
   #endif
 
@@ -539,7 +539,7 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 founddeallocuvmPTEP:
         curproc->freepages[i].va = (char*) 0xffffffff;
 
-#if SCFIFO
+#if SELECTION==SCFIFO
 
 
         if (curproc->head == &curproc->freepages[i]){
@@ -567,7 +567,7 @@ doneLooking:
         curproc->freepages[i].next = 0;
         curproc->freepages[i].prev = 0;
 
-#elif NFU
+#elif SELECTION==NFUA
         curproc->freepages[i].age = 0;
 #endif
 #endif
@@ -739,7 +739,7 @@ void swap_scfifo(uint addr) {
     curproc->head->prev = swapper_page;
     curproc->head = swapper_page;
     swapper_page = curproc->tail;
-  } while(check_access_bit(curproc->head->va) && swapper_page != original_tail);
+  } while (check_access_bit(curproc->head->va) && swapper_page != original_tail);
 
 
   // Get address of the page table entry to copy into the swap file
@@ -749,13 +749,16 @@ void swap_scfifo(uint addr) {
   }
 
   // Find a swap file page descriptor slot.
-  for (i = 0; i < MAX_PSYC_PAGES; i++){
-    if (curproc->swappedpages[i].va == (char*)PTE_ADDR(addr))
-      goto foundswappedpageslot;
+  int found = 0;
+  for (i = 0; i < MAX_PSYC_PAGES; i++) {
+    if (curproc->swappedpages[i].va == (char*)PTE_ADDR(addr)) {
+      found = 1;
+      break;
+    }
   }
-  panic("swap_scfifo: SCFIFO no slot for swapped page");
-
-foundswappedpageslot:
+  if (!found) {
+    panic("swap_scfifo: SCFIFO no slot for swapped page");
+  }
 
   curproc->swappedpages[i].va = curproc->head->va;
   //assign the physical page to addr in the relevant page table
@@ -793,22 +796,23 @@ void swap_nfua(uint addr) {
   int i, j;
 
   // MAX_POSSIBLE;
-  uint maxIndx = -1, maxAge = 0;
+  uint minIndex = -1;
+  int minAge = 0;
   char buf[BUF_SIZE];
   pte_t *pte1, *pte2;
   struct freepg *chosen;
 
   for (j = 0; j < MAX_PSYC_PAGES; j++)
     if (curproc->freepages[j].va != (char*)0xffffffff) {
-      if (curproc->freepages[j].age > maxAge) {
-        maxAge = curproc->freepages[j].age;
-        maxIndx = j;
+      if (numberOfSetBits(curproc->freepages[j].age_bits) < minAge) {
+        minAge = numberOfSetBits(curproc->freepages[j].age);
+        minIndex = j;
       }
     }
 
-  if(maxIndx == -1)
+  if(minIndex == -1)
     panic("swap_nfua: no free page to swap???");
-  chosen = &curproc->freepages[maxIndx];
+  chosen = &curproc->freepages[minIndex];
 
   //find the address of the page table entry to copy into the swap file
   pte1 = walkpgdir(curproc->pgdir, (void*)chosen->va, 0);
@@ -825,22 +829,24 @@ void swap_nfua(uint addr) {
   release(&tickslock);
 
   //find a swap file page descriptor slot
+  int found = 0;
   for (i = 0; i < MAX_PSYC_PAGES; i++){
-    if (curproc->swappedpages[i].va == (char*)PTE_ADDR(addr))
-      goto foundswappedpageslot;
+    if (curproc->swappedpages[i].va == (char*)PTE_ADDR(addr)) {
+      found = 1;
+      break;
+    }
   }
-  panic("swap_nfua: no slot for swapped page");
-
-foundswappedpageslot:
+  if (!found) {
+    panic("swap_nfua: no slot for swapped page");
+  }
 
   curproc->swappedpages[i].va = chosen->va;
-  //assign the physical page to addr in the relevant page table
+  // assign the physical page to addr in the relevant page table
   pte2 = walkpgdir(curproc->pgdir, (void*)addr, 0);
   if (!*pte2)
     panic("swap_nfua: pte2 is empty");
-  //set page table entry
 
-  *pte2 = PTE_ADDR(*pte1) | PTE_U | PTE_W | PTE_P;// access bit is zeroed...
+  *pte2 = PTE_ADDR(*pte1) | PTE_U | PTE_W | PTE_P;
 
   for (j = 0; j < 4; j++) {
     int loc = (i * PGSIZE) + ((PGSIZE / 4) * j);
@@ -877,20 +883,15 @@ void swap_page(uint addr) {
     return;
   }
 
-#if SCFIFO
+#if SELECTION==SCFIFO
   swap_scfifo(addr);
-#elif NFU
+#elif SELECTION==NFUA
   swap_nfua(addr);
 #endif
 
   lcr3(V2P(curproc->pgdir));
   ++curproc->totalPagedOutCount;
 }
-
-
-
-
-
 
 /* TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
 
