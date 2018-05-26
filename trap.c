@@ -7,6 +7,7 @@
 #include "x86.h"
 #include "traps.h"
 #include "spinlock.h"
+#include "types.h"
 
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
@@ -36,6 +37,8 @@ idtinit(void)
 void
 trap(struct trapframe *tf)
 {
+  uint address;
+  pde_t *virtual_address;  
   struct proc *curproc = myproc();
   if(tf->trapno == T_SYSCALL){
     if(myproc()->killed)
@@ -54,7 +57,7 @@ trap(struct trapframe *tf)
 
       #if SELECTION==NFUA || SELECTION==LAPA
       // Age page accesses.
-      update_process_page_accesses();
+      update_accesses();
       #endif
 
       ticks++;
@@ -84,42 +87,20 @@ trap(struct trapframe *tf)
             cpuid(), tf->cs, tf->eip);
     lapiceoi();
     break;
-  case T_PGFLT:/*added by noy*****************************************/
-    if(curproc) {
-    	curproc->page_faults++;
-    	uint cr2 = (uint) (PGROUNDDOWN(rcr2()));
-    	pte_t* missing_page = walkpgdir(curproc->pgdir, (void*) cr2, 0);
-      if(!(PTE_FLAGS(*missing_page) & PTE_PG)) {
-          panic("segmentation fault");
+  
+     case T_PGFLT:
+    address = rcr2();
+    virtual_address = &curproc->pgdir[PDX(address)];
+
+    if (((int)(*virtual_address) & PTE_P) != 0) { 
+        // if page table isn't present at page directory -> hard page fault
+      if (((uint*)PTE_ADDR(P2V(*virtual_address)))[PTX(address)] & PTE_PG) { 
+          // if the page is in the process's swap file     
+        swap_page(PTE_ADDR(address));
+        ++curproc->totalPageFaultCount;      
+        return;
       }
-
-  		if(get_physical_pages() >= MAX_PSYC_PAGES) {
-  		    swap_page();
-  		}
-
-    	int offset = get_page_offset_and_unset_page(cr2);
-    	char* page_mem;
-    	page_mem = kalloc();
-    	if (page_mem == 0) {
-        panic("could not allocate memory for page");
-      }
-    	pagesCounter++;
-
-      #if SELECTION==SCFIFO
-        enqueueScfifo(cr2);
-      #endif
-
-      memset(page_mem, 0, PGSIZE);
-      if (readFromSwapFile(curproc, page_mem, offset, PGSIZE) == -1) {
-        panic("didnt read from swap file - trap.c");
-      }
-
-      uint flags = PTE_FLAGS(*missing_page);
-      *missing_page = V2P(page_mem) | flags | PTE_P | PTE_U | PTE_W;
-      *missing_page &= ~PTE_PG;
-      insert_page_va(cr2, PHYSICAL);
     }
-    break;
 
   //PAGEBREAK: 13
   default:

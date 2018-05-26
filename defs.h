@@ -134,26 +134,7 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
-/***added by Noy***/
-int            get_physical_pages(void);
-int            swap_pages_in_disk_count(void);
-int            get_page_offset_and_unset_page(uint);
-int            get_offset_for_page_insert(uint);
-int            addToPages(uint, struct proc*);
-void           insert_page_va(uint, memory_location);
-void           removePage(uint);
-void           enqueueScfifo(uint);
-uint           dequeueScfifo(void);
-void			     updateScfifo(int, uint, int);
-uint           getLap(void);
-void           updateLap(void);
-void		       allocFork(struct proc*);
-int		         getFirstElement(int);
-int		         find_page_index(uint);
-void           removeElement(uint va);
-uint           get_nfua_page_to_swap();
-void print_procces_info(struct proc* p, int print_free_pages);
-
+void            update_accesses();
 // swtch.S
 void            swtch(struct context**, struct context*);
 
@@ -208,9 +189,8 @@ void            uartintr(void);
 void            uartputc(int);
 
 // vm.c
-int             strcmp(); //added by Noy
+int             strcmp(const char*, const char*); //added by Noy
 void            seginit(void);
-int             NewDeallocuvm(pde_t*, uint, uint);
 void            kvmalloc(void);
 pde_t*          setupkvm(void);
 char*           uva2ka(pde_t*, char*);
@@ -225,8 +205,7 @@ void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
 pte_t*          walkpgdir(pde_t*, const void*, int);
-uint            get_va(void); //added by Noy
-void            swap_page(void); //added by Noy
+void            swap_page(uint); //added by Noy
 void            update_process_page_accesses();
 void            update_access_counters(struct proc *process);
 int             numberOfSetBits(uint i); //added by Noy

@@ -7,7 +7,7 @@ struct cpu {
   volatile uint started;       // Has the CPU started?
   int ncli;                    // Depth of pushcli nesting.
   int intena;                  // Were interrupts enabled before pushcli?
-  struct proc *proc;           // The process running on this cpu or null
+  struct proc *proc;          // The process running on this cpu or null
 };
 
 extern struct cpu cpus[NCPU];
@@ -34,37 +34,18 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
-
-// Process memory is laid out contiguously, low addresses first:
-//   text
-//   original data and bss
-//   fixed-size stack
-//   expandable heap
-
-
-
-/* ====== task1 pages stuff =======  */
-#include "pages_def.h"
-
-struct pages {
-    int count;
-    uint va[MAX_TOTAL_PAGES];
-    memory_location location[MAX_TOTAL_PAGES];
-    uint accesses[MAX_TOTAL_PAGES];
+struct pgdesc {
+  uint swaploc;
+  int age;
+  char *va;
 };
 
-struct diskPage{
-    char elements;
-    uint va;
-};
-
-
-struct fifoQueue {
-	char elements[MAX_PSYC_PAGES];
-	uint va[MAX_PSYC_PAGES];
-	int first;
-	int last;
-	int count;
+struct freepg {
+  char *va;
+  int age;
+  uint age_bits;
+  struct freepg *next;
+  struct freepg *prev;
 };
 
 // Per-process state
@@ -84,19 +65,14 @@ struct proc {
   char name[16];               // Process name (debugging)
 
   //Swap file. must initiate with create swap file
-  struct file *swapFile;      //page file
+  struct file *swapFile;			//page file
 
-  // === Task 1 pages stuff. ===
-  // Proc's memory pages.
-  struct pages pages;
-  // Pages on the disk
-  struct diskPage diskPages[MAX_TOTAL_PAGES - MAX_PSYC_PAGES];
-  // number of page faults
-  uint page_faults;
-  // number of pages in the disk
-  uint pages_on_disk;
-  // total number of paged out pages
-  uint total_pages_on_disk;
-  // ====================== TASK 2
-  struct fifoQueue fifoQueue;
+  int pagesinmem;             // No. of pages in physical memory
+  int pagesinswapfile;        // No. of pages in swap file
+  int totalPageFaultCount;    // Total number of page faults for this process
+  int totalPagedOutCount;     // Total number of pages that were placed in the swap file
+  struct freepg physical_pages[MAX_PSYC_PAGES];  // Pre-allocated space for the pages in physical memory linked list
+  struct pgdesc swappedpages[MAX_PSYC_PAGES];// Pre-allocated space for the pages in swap file array
+  struct freepg *head;        // Head of the pages in physical memory linked list
+  struct freepg *tail;        // End of the pages in physical memory linked list
 };

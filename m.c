@@ -131,7 +131,7 @@ main(int argc, char *argv[]){
 	gets(input, 10);
 
 	/*
-	If DEBUG flag is defined as != 0 this is just another example showing 
+	If DEBUG flag is defined as != 0 this is just another example showing
 	that because SCFIFO doesn't page out accessed pages, no needless page faults occurr.
 	*/
 	if(DEBUG){
@@ -170,8 +170,8 @@ main(int argc, char *argv[]){
 	}
 
 
-	#elif NFU
-	
+	#elif SELECTION==NFUA
+
 	int i, j;
 	char *arr[27];
 	char input[10];
@@ -222,7 +222,7 @@ main(int argc, char *argv[]){
 	gets(input, 10);
 
 	/*
-	If DEBUG flag is defined as != 0 this is just another example showing 
+	If DEBUG flag is defined as != 0 this is just another example showing
 	that because NFU doesn't page out accessed pages, no needless page faults occurr.
 	*/
 	if(DEBUG){

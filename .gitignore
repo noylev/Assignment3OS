@@ -157,3 +157,8 @@ vectors.o
 vm.d
 vm.o
 xv6.img
+myMemTest.sym
+myMemTest.o
+myMemTest.d
+myMemTest.asm
+_myMemTest

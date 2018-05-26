@@ -50,6 +50,8 @@
 #define NSEGS     6
 #define MAX_PSYC_PAGES  16     //task 1.1
 #define MAX_TOTAL_PAGES 32   //task 1.1
+
+
 #ifndef __ASSEMBLER__
 // Segment Descriptor
 struct segdesc {
