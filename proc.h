@@ -37,6 +37,7 @@ enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 struct pgdesc {
   uint swaploc;
   int age;
+  uint age_bits;
   char *va;
 };
 
@@ -68,9 +69,9 @@ struct proc {
   struct file *swapFile;			//page file
 
   int pagesinmem;             // No. of pages in physical memory
-  int pagesinswapfile;        // No. of pages in swap file
+  int swapped_pages_count;        // No. of pages in swap file
   int totalPageFaultCount;    // Total number of page faults for this process
-  int totalPagedOutCount;     // Total number of pages that were placed in the swap file
+  int page_out_total;     // Total number of pages that were placed in the swap file
   struct freepg physical_pages[MAX_PSYC_PAGES];  // Pre-allocated space for the pages in physical memory linked list
   struct pgdesc swappedpages[MAX_PSYC_PAGES];// Pre-allocated space for the pages in swap file array
   struct freepg *head;        // Head of the pages in physical memory linked list

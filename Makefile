@@ -1,8 +1,3 @@
-ifndef SELECTION
-SELECTION := SCFIFO
-endif
-
-
 OBJS = \
 	bio.o\
 	console.o\
@@ -77,9 +72,12 @@ QEMU = $(shell if which qemu > /dev/null; \
 endif
 
 ifndef SELECTION
- SELECTION=SCFIFO
+SELECTION := SCFIFO
 endif
 
+ifndef VERBOSE_PRINT
+VERBOSE_PRINT := FALSE
+endif
 
 CC = $(TOOLPREFIX)gcc
 AS = $(TOOLPREFIX)gas
@@ -88,7 +86,8 @@ OBJCOPY = $(TOOLPREFIX)objcopy
 OBJDUMP = $(TOOLPREFIX)objdump
 CFLAGS = -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer
 #CFLAGS = -fno-pic -static -fno-builtin -fno-strict-aliasing -fvar-tracking -fvar-tracking-assignments -O0 -g -Wall -MD -gdwarf-2 -m32 -Werror -fno-omit-frame-pointer
-CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector -D SELECTION=$(SELECTION))
+CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
+CFLAGS += -D$(SELECTION) -D$(VERBOSE_PRINT) -D SELECTION=$(SELECTION)
 ASFLAGS = -m32 -gdwarf-2 -Wa,-divide
 # FreeBSD ld wants ``elf_i386_fbsd''
 LDFLAGS += -m $(shell $(LD) -V | grep elf_i386 2>/dev/null | head -n 1)

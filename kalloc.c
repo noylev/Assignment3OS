@@ -10,7 +10,7 @@
 #include "spinlock.h"
 #include "kalloc.h"
 
-struct physPagesCounts physPagesCounts;
+struct page_statistics page_statistics;
 
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
@@ -26,9 +26,6 @@ struct {
   struct run *freelist;
 } kmem;
 
-int pages_counter = 0;  //added by noy  
-int total_pages_in_system = 0;// added by noy 
-
 
 // Initialization happens in two phases.
 // 1. main() calls kinit1() while still using entrypgdir to place just
@@ -41,15 +38,15 @@ kinit1(void *vstart, void *vend)
   initlock(&kmem.lock, "kmem");
   kmem.use_lock = 0;
   freerange(vstart, vend);
-  physPagesCounts.initPagesNo = (PGROUNDDOWN((uint)vend) - PGROUNDUP((uint)vstart)) / PGSIZE;
+  page_statistics.inital_number = (PGROUNDDOWN((uint)vend) - PGROUNDUP((uint)vstart)) / PGSIZE;
 }
 
 void
 kinit2(void *vstart, void *vend)
 {
   freerange(vstart, vend);
-  physPagesCounts.initPagesNo += (PGROUNDDOWN((uint)vend) - PGROUNDUP((uint)vstart)) / PGSIZE;
-  kmem.use_lock = 1;  
+  page_statistics.inital_number += (PGROUNDDOWN((uint)vend) - PGROUNDUP((uint)vstart)) / PGSIZE;
+  kmem.use_lock = 1;
 }
 
 void
@@ -81,7 +78,7 @@ kfree(char *v)
   r = (struct run*)v;
   r->next = kmem.freelist;
   kmem.freelist = r;
-  physPagesCounts.currentphysical_pagesNo++;
+  page_statistics.current_number++;
   if(kmem.use_lock)
     release(&kmem.lock);
 }
@@ -99,10 +96,9 @@ kalloc(void)
   r = kmem.freelist;
   if(r){
     kmem.freelist = r->next;
-    physPagesCounts.currentphysical_pagesNo--;
+    page_statistics.current_number--;
   }
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;
 }
-

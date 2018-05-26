@@ -9,10 +9,8 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
-#define TRUE 1   //added by noy
-#define FALSE 0 //added by noy
 
-typedef uint pte_t;//added by noy
+typedef uint pte_t;
 
 #include "pages_def.h"
 
@@ -134,7 +132,9 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+// Custom
 void            update_accesses();
+
 // swtch.S
 void            swtch(struct context**, struct context*);
 
@@ -205,6 +205,8 @@ void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
 pte_t*          walkpgdir(pde_t*, const void*, int);
+// Custom.
+void            swap_helper(struct proc*, uint, int, pte_t*);
 void            swap_page(uint); //added by Noy
 void            update_process_page_accesses();
 void            update_access_counters(struct proc *process);

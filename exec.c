@@ -38,13 +38,12 @@ exec(char *path, char **argv)
   if((pgdir = setupkvm()) == 0)
     goto bad;
 
-    // backup and reset proc fields
+// Send to swap and reset fields.
 #ifndef NONE
-  //TODO delete   cprintf("EXEC: NONE undefined (proc = %s)- backing up page info \n", curproc->name);
   int pagesinmem = curproc->pagesinmem;
-  int pagesinswapfile = curproc->pagesinswapfile;
+  int swapped_pages_count = curproc->swapped_pages_count;
   int totalPageFaultCount = curproc->totalPageFaultCount;
-  int totalPagedOutCount = curproc->totalPagedOutCount;
+  int page_out_total = curproc->page_out_total;
   struct freepg physical_pages[MAX_PSYC_PAGES];
   struct pgdesc swappedpages[MAX_PSYC_PAGES];
   for (i = 0; i < MAX_PSYC_PAGES; i++) {
@@ -56,8 +55,10 @@ exec(char *path, char **argv)
     curproc->physical_pages[i].prev = 0;
     physical_pages[i].age = curproc->physical_pages[i].age;
     curproc->physical_pages[i].age = 0;
+    curproc->physical_pages[i].age_bits = 0;
     swappedpages[i].age = curproc->swappedpages[i].age;
     curproc->swappedpages[i].age = 0;
+    curproc->swappedpages[i].age_bits = 0;
     swappedpages[i].va = curproc->swappedpages[i].va;
     curproc->swappedpages[i].va = (char*)0xffffffff;
     swappedpages[i].swaploc = curproc->swappedpages[i].swaploc;
@@ -66,17 +67,12 @@ exec(char *path, char **argv)
   struct freepg *head = curproc->head;
   struct freepg *tail = curproc->tail;
   curproc->pagesinmem = 0;
-  curproc->pagesinswapfile = 0;
+  curproc->swapped_pages_count = 0;
   curproc->totalPageFaultCount = 0;
-  curproc->totalPagedOutCount = 0;
+  curproc->page_out_total = 0;
   curproc->head = 0;
   curproc->tail = 0;
 #endif
-
-
-
-
-
 
   // Load program into memory.
   sz = 0;
@@ -140,7 +136,7 @@ exec(char *path, char **argv)
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
 
- // a swap file has been created in fork(), but its content was of the
+  // a swap file has been created in fork(), but its content was of the
   // parent process, and is no longer relevant.
   removeSwapFile(curproc);
   createSwapFile(curproc);
@@ -157,21 +153,21 @@ exec(char *path, char **argv)
     end_op();
   }
 
-  #ifndef NONE
-  proc->pagesinmem = pagesinmem;
-  proc->pagesinswapfile = pagesinswapfile;
-  proc->totalPageFaultCount = totalPageFaultCount;
-  proc->totalPagedOutCount = totalPagedOutCount;
-  proc->head = head;
-  proc->tail = tail;
+#ifndef NONE
+  curproc->pagesinmem = pagesinmem;
+  curproc->swapped_pages_count = swapped_pages_count;
+  curproc->totalPageFaultCount = totalPageFaultCount;
+  curproc->page_out_total = page_out_total;
+  curproc->head = head;
+  curproc->tail = tail;
   for (i = 0; i < MAX_PSYC_PAGES; i++) {
-    proc->physical_pages[i].va = physical_pages[i].va;
-    proc->physical_pages[i].next = physical_pages[i].next;
-    proc->physical_pages[i].prev = physical_pages[i].prev;
-    proc->physical_pages[i].age = physical_pages[i].age;
-    proc->swappedpages[i].age = swappedpages[i].age;
-    proc->swappedpages[i].va = swappedpages[i].va;
-    proc->swappedpages[i].swaploc = swappedpages[i].swaploc;
+    curproc->physical_pages[i].va = physical_pages[i].va;
+    curproc->physical_pages[i].next = physical_pages[i].next;
+    curproc->physical_pages[i].prev = physical_pages[i].prev;
+    curproc->physical_pages[i].age = physical_pages[i].age;
+    curproc->swappedpages[i].age = swappedpages[i].age;
+    curproc->swappedpages[i].va = swappedpages[i].va;
+    curproc->swappedpages[i].swaploc = swappedpages[i].swaploc;
   }
 #endif
 

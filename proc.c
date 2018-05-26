@@ -7,6 +7,7 @@
 #include "proc.h"
 #include "spinlock.h"
 #include "kalloc.h"
+
 #define ADD_TO_AGE 0x40000000
 #define DEBUG 0
 
@@ -163,13 +164,14 @@ allocproc(void)
     p->physical_pages[i].prev = 0;
     p->physical_pages[i].age = 0;
     p->swappedpages[i].age = 0;
+    p->swappedpages[i].age_bits = 0;
     p->swappedpages[i].swaploc = 0;
     p->swappedpages[i].va = (char*)0xffffffff;
   }
   p->pagesinmem = 0;
-  p->pagesinswapfile = 0;
+  p->swapped_pages_count = 0;
   p->totalPageFaultCount = 0;
-  p->totalPagedOutCount = 0;
+  p->page_out_total = 0;
   p->head = 0;
   p->tail = 0;
 
@@ -177,7 +179,7 @@ allocproc(void)
 }
 
 void
-printProcMemPageInfo(struct proc *proc){
+display_proc_info(struct proc *proc){
   static char *states[] = {
   [UNUSED]    "unused",
   [EMBRYO]    "embryo",
@@ -189,7 +191,7 @@ printProcMemPageInfo(struct proc *proc){
   int i;
   char *state;
   uint pc[10];
-  struct freepg *l;
+  // struct freepg *l;
 
   if(proc->state >= 0 && proc->state < NELEM(states) && states[proc->state])
     state = states[proc->state];
@@ -201,9 +203,9 @@ printProcMemPageInfo(struct proc *proc){
 
   //print out memory pages info:
   cprintf("No. of pages currently in physical memory: %d,\n", proc->pagesinmem);
-  cprintf("No. of pages currently paged out: %d,\n", proc->pagesinswapfile);
+  cprintf("No. of pages currently paged out: %d,\n", proc->swapped_pages_count);
   cprintf("Total No. of page faults: %d,\n", proc->totalPageFaultCount);
-  cprintf("Total number of paged out pages: %d,\n\n", proc->totalPagedOutCount);
+  cprintf("Total number of paged out pages: %d,\n\n", proc->page_out_total);
 
   // regular xv6 procdump printing
   if(proc->state == SLEEPING){
@@ -211,27 +213,6 @@ printProcMemPageInfo(struct proc *proc){
     for(i=0; i<10 && pc[i] != 0; i++)
       cprintf(" %p", pc[i]);
   }
-  if(DEBUG){
-    for (i = 0; i < MAX_PSYC_PAGES; ++i)
-    {
-      if(proc->physical_pages[i].va != (char*)0xffffffff)
-        cprintf("physical_pages[%d].va = 0x%x \n", i, proc->physical_pages[i].va);
-    }
-    i = 0;
-    l = proc->head;
-    if(l == 0)
-      cprintf("proc->head == 0");
-    else {
-      cprintf("proc->head == 0x%x , i=%d\n", l->va, ++i);
-      while(l->next != 0){
-        l = l->next;
-        cprintf("next->va == 0x%x , i=%d\n", l->va, ++i);
-      }
-      cprintf("next link is null, list is finished!\n");
-    }
-    if(proc->tail != 0)
-      cprintf("tail->va == 0x%x \n", proc->tail->va);
-    }
 }
 
 //PAGEBREAK: 32
@@ -317,7 +298,7 @@ fork(void)
         return -1;
     }
     np->pagesinmem = curproc->pagesinmem;
-    np->pagesinswapfile = curproc->pagesinswapfile;
+    np->swapped_pages_count = curproc->swapped_pages_count;
     np->sz = curproc->sz;
     np->parent = curproc;
     *np->tf = *curproc->tf;
@@ -338,12 +319,12 @@ fork(void)
   char buf[PGSIZE / 2] = "";
   int offset = 0;
   int nread = 0;
-  // read the parent's swap file in chunks of size PGDIR/2, otherwise for some
-  // reason, you get "panic acquire" if buf is ~4000 bytes
+
   if (strcmp(curproc->name, "init") != 0 && strcmp(curproc->name, "sh") != 0) {
     while ((nread = readFromSwapFile(curproc, buf, offset, PGSIZE / 2)) != 0) {
       if (writeToSwapFile(np, buf, offset, nread) == -1)
         panic("fork: error while writing the parent's swap file to the child");
+
       offset += nread;
     }
   }
@@ -370,17 +351,13 @@ fork(void)
 #if SCFIFO
   for (i = 0; i < MAX_PSYC_PAGES; i++) {
     if (curproc->head->va == np->physical_pages[i].va){
-      //TODO delete       cprintf("\nfork: head copied!\n\n");
       np->head = &np->physical_pages[i];
     }
     if (curproc->tail->va == np->physical_pages[i].va){
       np->tail = &np->physical_pages[i];
-      //cprintf("\nfork: head copied!\n\n");
     }
   }
 #endif
-
-
 
   acquire(&ptable.lock);
   np->state = RUNNABLE;
@@ -412,8 +389,8 @@ exit(void)
     panic("exit: error deleting swap file");
 
   #if TRUE
-  // sending proc as arg just to share func with procdump
-  printProcMemPageInfo(curproc);
+    // sending proc as arg just to share func with procdump
+    display_proc_info(curproc);
   #endif
 
   begin_op();
@@ -678,18 +655,16 @@ kill(int pid)
 void
 procdump(void)
 {
-  int percent;
   struct proc *p;
 
+  acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == UNUSED)
       continue;
-    printProcMemPageInfo(p);
+    display_proc_info(p);
   }
-
-  // print general (not per-process) physical memory pages info
-  percent = physPagesCounts.currentphysical_pagesNo * 100 / physPagesCounts.initPagesNo;
-  cprintf("\n\nPercent of free physical pages: %d/%d ~ 0.%d%% \n",  physPagesCounts.currentphysical_pagesNo,
+  release(&ptable.lock);
+    // TODO
 }
 
 
@@ -700,32 +675,3 @@ int numberOfSetBits(uint i){
      i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
      return (((i + (i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
 }
-
-//
-// /**
-//  * Get page to swap by NFUA selection scheme.
-//  */
-// uint get_nfua_page_to_swap() {
-// 	struct proc *curproc = myproc();
-// 	int min_access = -1;
-// 	int min_va = 0;
-//   int index;
-//
-// 	for (index = 0; index < MAX_TOTAL_PAGES; index++) {
-// 		if (curproc->pages.location[index] == PHYSICAL) {
-// 			min_access = curproc->pages.accesses[index];
-// 			min_va = curproc->pages.va[index];
-// 			break;
-// 		}
-// 	}
-// 	if (min_access == -1) panic("no pages in ram");
-// 	for (; index < MAX_TOTAL_PAGES; index++) {
-// 		if (
-//         curproc->pages.location[index] == PHYSICAL &&
-//         curproc->pages.accesses[index] < min_access) {
-// 			min_access = curproc->pages.accesses[index];
-// 			min_va = curproc->pages.va[index];
-// 		}
-// 	}
-// 	return min_va;
-// }

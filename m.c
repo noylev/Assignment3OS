@@ -87,9 +87,6 @@ main(int argc, char *argv[]){
 	char *arr[14];
 	char input[10];
 
-	// TODO delete
-	printf(1, "myMemTest: testing SCFIFO... \n");
-
 	// Allocate all remaining 12 physical pages
 	for (i = 0; i < 12; ++i) {
 		arr[i] = sbrk(PGSIZE);
@@ -175,9 +172,6 @@ main(int argc, char *argv[]){
 	int i, j;
 	char *arr[27];
 	char input[10];
-
-	// TODO delete
-	printf(1, "myMemTest: testing NFU... \n");
 
 	// Allocate all remaining 12 physical pages
 	for (i = 0; i < 12; ++i) {
