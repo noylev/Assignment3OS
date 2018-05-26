@@ -690,7 +690,6 @@ procdump(void)
   // print general (not per-process) physical memory pages info
   percent = physPagesCounts.currentphysical_pagesNo * 100 / physPagesCounts.initPagesNo;
   cprintf("\n\nPercent of free physical pages: %d/%d ~ 0.%d%% \n",  physPagesCounts.currentphysical_pagesNo,
-                                                                    physPagesCounts.initPagesNo , percent);
 }
 
 
