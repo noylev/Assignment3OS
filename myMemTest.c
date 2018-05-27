@@ -1,118 +1,275 @@
-// #include "types.h"
-// #include "user.h"
-// #include "fcntl.h"
-
-// int
-// main(void)
-// {
-// 	int array [1048576];
-// 	array[0]=4;
-// 	array[8000]=21;
-// 	array[400000]=array[0]+array[8000];
-// 	exit();
-// }
 #include "types.h"
-#include "user.h"
 #include "stat.h"
+#include "user.h"
 #include "syscall.h"
 
 #define PGSIZE 4096
-#define FREE_SPACE_ON_RAM 12
-void waitForUserToAnalyze();
+#define DEBUG 0
 
+int
+main(int argc, char *argv[]){
 
-int main(int argc, char *argv[]){
-	#ifdef LIFO
-		printf(1,"Testing LIFO MODE:\npress Enter...\n");
-	#elif LAP
-		printf(1,"Testing LAP MODE:\npress Enter...\n");
-	#elif SCFIFO
-        printf(1,"Testing SCFIFO MODE:\npress Enter...\n");
-	#endif
-    
-    //allocate 12 pages
-    char* pages[25];
-    int i;
-    printf(1,"Allocating 12 pages (0-11)..\n");
-    for(i=0; i < FREE_SPACE_ON_RAM; ++i){
-        pages[i] = sbrk(PGSIZE);
-        printf(1, "page #%d at address: %x\n", i, pages[i]);
-    }
-    printf(1,"Reached max. number of pages on RAM..\n"); //i=11
-    waitForUserToAnalyze();
-    
-    //access pages
-    printf(1,"Accessing pages 0-2\n");
-    pages[0][0]=1;
-    pages[1][0]=1;
-    pages[2][0]=1;
-    printf(1,"All pages on RAM, no page faults expected.\n");
-    waitForUserToAnalyze();
-    
-    //allocate 12 more pages
-    printf(1,"Allocating 12 more pages (12 swap outs should occur).\n"); //i=22
-    int j;
-    for(j=0; j<FREE_SPACE_ON_RAM; j++){
-    	printf(1, "page #%d at address: %x\n", i, pages[i]);
-        pages[i] = sbrk(PGSIZE);
-        
-        i++;
-    }
+	#if FIFO
 
-    // LIFO:	swap only the last page, 15 ||| 1-14 remains
-    // SCFIFO:	swap pages 6-15,3-4 ||| 1,2,5 remains
-    // LAP:		swap pages 6-15 (6&7 twice) ||| 1-5 remains
-    waitForUserToAnalyze();
+	int i, j;
+	char *arr[14];
+	char input[10];
+	// Allocate all remaining 12 physical pages
+	for (i = 0; i < 12; ++i) {
+		arr[i] = sbrk(PGSIZE);
+		printf(1, "arr[%d]=0x%x\n", i, arr[i]);
+	}
+	printf(1, "Called sbrk(PGSIZE) 12 times - all physical pages taken.\nPress any key...\n");
+	gets(input, 10);
 
-    printf(1,"Accessing pages 0,1,2,5,14\n");
-    pages[0][0]=1;
-    pages[1][0]=1;
-    pages[2][0]=1;
-    pages[5][0]=1;
-    pages[14][0]=1;
-    printf(1,"Expected page faults:\n[LIFO-1] [SCFIFO-3] [LAP-2]\n");
-    waitForUserToAnalyze();
+	/*
+	Allocate page 15.
+	This allocation would cause page 0 to move to the swap file, but upon returning
+	to user space, a PGFLT would occur and pages 0,1 will be hot-swapped.
+	Afterwards, page 1 is in the swap file, the rest are in memory.
+	*/
+	arr[12] = sbrk(PGSIZE);
+	printf(1, "arr[12]=0x%x\n", arr[12]);
+	printf(1, "Called sbrk(PGSIZE) for the 13th time, a page fault should occur and one page in swap file.\nPress any key...\n");
+	gets(input, 10);
 
+	/*
+	Allocate page 16.
+	This would cause page 2 to move to the swap file, but since it contains the
+	user stack, it would be hot-swapped with page 3.
+	Afterwards, pages 1 & 3 are in the swap file, the rest are in memory.
+	*/
+	arr[13] = sbrk(PGSIZE);
+	printf(1, "arr[13]=0x%x\n", arr[13]);
+	printf(1, "Called sbrk(PGSIZE) for the 14th time, a page fault should occur and two pages in swap file.\nPress any key...\n");
+	gets(input, 10);
 
-    // ============= Fork =============
-    printf(1,"Forking..\n");
-    int pid = fork();
-    if(pid != 0){
-        //parent
-        sleep(2);
-        wait();
-        printf(1,"Parent:: Hello\n");
-        waitForUserToAnalyze();
-    }
-    else{
-        //son
-        printf(1,"Son:: accessing pages 0,1,2,5,14\n");
-        pages[0][0]=1;
-        pages[1][0]=1;
-        pages[2][0]=1;
-        pages[5][0]=1;
-        pages[14][0]=1;
-        printf(1,"No page faults should occur!\n");
-        waitForUserToAnalyze();
-        exit();
-    }
+	/*
+	Access page 3, causing a PGFLT, since it is in the swap file. It would be
+	hot-swapped with page 4. Page 4 is accessed next, so another PGFLT is invoked,
+	and this process repeats a total of 5 times.
+	*/
+	for (i = 0; i < 5; i++) {
+		for (j = 0; j < PGSIZE; j++)
+			arr[i][j] = 'k';
+	}
+	printf(1, "5 page faults should have occurred.\nPress any key...\n");
+	gets(input, 10);
 
-	
-    // ============= Free Pages =============
-	printf(1,"Freeing pages..\n");
-	for(i=0; i < (FREE_SPACE_ON_RAM*2); i++){
-		pages[i] = sbrk(-PGSIZE);
-		printf(1, "page #%d at address: %x\n", i, pages[i]);
+	if (fork() == 0) {
+		printf(1, "Child code running.\n");
+		printf(1, "View statistics for pid %d, then press any key...\n", getpid());
+		gets(input, 10);
+
+		/*
+		The purpose of this write is to create a PGFLT in the child process, and
+		verify that it is caught and handled properly.
+		*/
+		arr[5][0] = 't';
+		printf(1, "A page fault should have occurred for page 8.\nPress any key to exit the child code.\n");
+		gets(input, 10);
+
+		exit();
+	}
+	else {
+		wait();
+
+		/*
+		Deallocate all the pages.
+		*/
+		sbrk(-14 * PGSIZE);
+		printf(1, "Deallocated all extra pages.\nPress any key to exit the father code.\n");
+		gets(input, 10);
 	}
 
-	//Finish testing
-	printf(1,"All tests finished successfully!\n");
-	exit();
-	return 0;
-}
+#elif SCFIFO
+	int i, j;
+	char *arr[14];
+	char input[10];
 
-void waitForUserToAnalyze(){
-    char buffer[10];
-	printf(1,"Analyze using <CTRL+P>, press ENTER to continue...\n");
-	gets(buffer,3);
+	// TODO delete
+	printf(1, "myMemTest: testing SCFIFO... \n");
+
+	// Allocate all remaining 12 physical pages
+	for (i = 0; i < 12; ++i) {
+		arr[i] = sbrk(PGSIZE);
+		printf(1, "arr[%d]=0x%x\n", i, arr[i]);
+	}
+	printf(1, "Called sbrk(PGSIZE) 12 times - all physical pages taken.\nPress any key...\n");
+	gets(input, 10);
+
+	/*
+	Allocate page 15.
+	For this allocation, SCFIFO will consider moving page 0 to disk, but because it has been accessed, page 1 will be moved instead.
+	Afterwards, page 1 is in the swap file, the rest are in memory.
+	*/
+	arr[12] = sbrk(PGSIZE);
+	printf(1, "arr[12]=0x%x\n", arr[12]);
+	printf(1, "Called sbrk(PGSIZE) for the 13th time, no page fault should occur and one page in swap file.\nPress any key...\n");
+	gets(input, 10);
+
+	/*
+	Allocate page 16.
+	For this allocation, SCFIFO will consider moving page 2 to disk, but because it has been accessed, page 3 will be moved instead.
+	Afterwards, pages 1 & 3 are in the swap file, the rest are in memory.
+	*/
+	arr[13] = sbrk(PGSIZE);
+	printf(1, "arr[13]=0x%x\n", arr[13]);
+	printf(1, "Called sbrk(PGSIZE) for the 14th time, no page fault should occur and two pages in swap file.\nPress any key...\n");
+	gets(input, 10);
+
+	/*
+	Access page 3, causing a PGFLT, since it is in the swap file. It would be
+	hot-swapped with page 4. Page 4 is accessed next, so another PGFLT is invoked,
+	and this process repeats a total of 5 times.
+	*/
+	for (i = 0; i < 5; i++) {
+		for (j = 0; j < PGSIZE; j++)
+			arr[i][j] = 'k';
+	}
+	printf(1, "5 page faults should have occurred.\nPress any key...\n");
+	gets(input, 10);
+
+	/*
+	If DEBUG flag is defined as != 0 this is just another example showing 
+	that because SCFIFO doesn't page out accessed pages, no needless page faults occurr.
+	*/
+	if(DEBUG){
+		for (i = 0; i < 5; i++) {
+			printf(1, "Writing to address 0x%x\n", arr[i]);
+			arr[i][0] = 'k';
+		}
+		//printf(1, "No page faults should have occurred.\nPress any key...\n");
+		gets(input, 10);
+	}
+
+	if (fork() == 0) {
+		printf(1, "Child code running.\n");
+		printf(1, "View statistics for pid %d, then press any key...\n", getpid());
+		gets(input, 10);
+
+		/*
+		The purpose of this write is to create a PGFLT in the child process, and
+		verify that it is caught and handled properly.
+		*/
+		arr[5][0] = 'k';
+		printf(1, "A Page fault should have occurred in child proccess.\nPress any key to exit the child code.\n");
+		gets(input, 10);
+
+		exit();
+	}
+	else {
+		wait();
+
+		/*
+		Deallocate all the pages.
+		*/
+		sbrk(-14 * PGSIZE);
+		printf(1, "Deallocated all extra pages.\nPress any key to exit the father code.\n");
+		gets(input, 10);
+	}
+
+
+	#elif NFU
+	
+	int i, j;
+	char *arr[27];
+	char input[10];
+
+	// TODO delete
+	printf(1, "myMemTest: testing NFU... \n");
+
+	// Allocate all remaining 12 physical pages
+	for (i = 0; i < 12; ++i) {
+		arr[i] = sbrk(PGSIZE);
+		printf(1, "arr[%d]=0x%x\n", i, arr[i]);
+	}
+	printf(1, "Called sbrk(PGSIZE) 12 times - all physical pages taken.\nPress any key...\n");
+	gets(input, 10);
+
+	/*
+	Allocate page 15.
+	For this allocation, NFU will choose to move to disk the page that hasn't been accessed the longest (in this case page 1).
+	Afterwards, page 1 is in the swap file, the rest are in memory.
+	*/
+	arr[12] = sbrk(PGSIZE);
+	printf(1, "arr[12]=0x%x\n", arr[12]);
+	printf(1, "Called sbrk(PGSIZE) for the 13th time, no page fault should occur and one page in swap file.\nPress any key...\n");
+	gets(input, 10);
+
+	/*
+	Allocate page 16.
+	For this allocation, NFU will choose to move to disk the page that hasn't been accessed the longest (in this case page 3)
+	Afterwards, pages 1 & 3 are in the swap file, the rest are in memory.
+	*/
+	arr[13] = sbrk(PGSIZE);
+	printf(1, "arr[13]=0x%x\n", arr[13]);
+	printf(1, "Called sbrk(PGSIZE) for the 14th time, no page fault should occur and two pages in swap file.\nPress any key...\n");
+	gets(input, 10);
+
+	/*
+	Access page 3, causing a PGFLT, since it is in the swap file. It would be
+	hot-swapped with page 4. Page 4 is accessed next, so another PGFLT is invoked,
+	and this process repeats a total of 5 times.
+	*/
+	for (i = 0; i < 5; i++) {
+		printf(1, "Writing to address 0x%x\n", arr[i]);
+		for (j = 0; j < PGSIZE; j++){
+			arr[i][j] = 'k';
+		}
+	}
+	printf(1, "5 page faults should have occurred.\nPress any key...\n");
+	gets(input, 10);
+
+	/*
+	If DEBUG flag is defined as != 0 this is just another example showing 
+	that because NFU doesn't page out accessed pages, no needless page faults occurr.
+	*/
+	if(DEBUG){
+		for (i = 0; i < 5; i++){
+			printf(1, "Writing to address 0x%x\n", arr[i]);
+			arr[i][0] = 'k';
+		}
+		//printf(1, "No page faults should have occurred.\nPress any key...\n");
+		gets(input, 10);
+	}
+
+	if (fork() == 0) {
+		printf(1, "Child code running.\n");
+		printf(1, "View statistics for pid %d, then press any key...\n", getpid());
+		gets(input, 10);
+
+		/*
+		The purpose of this write is to create a PGFLT in the child process, and
+		verify that it is caught and handled properly.
+		*/
+		arr[5][0] = 'k';
+		//arr[5][0] = 't';
+		printf(1, "Page faults should have occurred in child proccess.\nPress any key to exit the child code.\n");
+		gets(input, 10);
+
+		exit();
+	}
+	else {
+		wait();
+
+		/*
+		Deallocate all the pages.
+		*/
+		sbrk(-14 * PGSIZE);
+		printf(1, "Deallocated all extra pages.\nPress any key to exit the father code.\n");
+		gets(input, 10);
+	}
+
+
+	#else
+	char* arr[50];
+	int i = 50;
+	printf(1, "Commencing user test for default paging policy.\nNo page faults should occur.\n");
+	for (i = 0; i < 50; i++) {
+		arr[i] = sbrk(PGSIZE);
+		printf(1, "arr[%d]=0x%x\n", i, arr[i]);
+	}
+	#endif
+	exit();
 }

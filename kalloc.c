@@ -26,10 +26,6 @@ struct {
   struct run *freelist;
 } kmem;
 
-int pages_counter = 0;  //added by noy  
-int total_pages_in_system = 0;// added by noy 
-
-
 // Initialization happens in two phases.
 // 1. main() calls kinit1() while still using entrypgdir to place just
 // the pages mapped by entrypgdir on free list.
@@ -49,7 +45,7 @@ kinit2(void *vstart, void *vend)
 {
   freerange(vstart, vend);
   physPagesCounts.initPagesNo += (PGROUNDDOWN((uint)vend) - PGROUNDUP((uint)vstart)) / PGSIZE;
-  kmem.use_lock = 1;  
+  kmem.use_lock = 1;
 }
 
 void
@@ -81,7 +77,7 @@ kfree(char *v)
   r = (struct run*)v;
   r->next = kmem.freelist;
   kmem.freelist = r;
-  physPagesCounts.currentphysical_pagesNo++;
+  physPagesCounts.currentFreePagesNo++;
   if(kmem.use_lock)
     release(&kmem.lock);
 }
@@ -99,10 +95,9 @@ kalloc(void)
   r = kmem.freelist;
   if(r){
     kmem.freelist = r->next;
-    physPagesCounts.currentphysical_pagesNo--;
+    physPagesCounts.currentFreePagesNo--;
   }
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;
 }
-

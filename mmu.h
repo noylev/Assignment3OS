@@ -48,9 +48,6 @@
 
 // cpu->gdt[NSEGS] holds the above segments.
 #define NSEGS     6
-#define MAX_PSYC_PAGES  16     //task 1.1
-#define MAX_TOTAL_PAGES 32   //task 1.1
-
 
 #ifndef __ASSEMBLER__
 // Segment Descriptor
@@ -144,7 +141,7 @@ struct segdesc {
 #define PTE_D           0x040   // Dirty
 #define PTE_PS          0x080   // Page Size
 #define PTE_MBZ         0x180   // Bits must be zero
-#define PTE_PG          0x200   // Paged out to secondary storage 
+#define PTE_PG          0x200   // Paged out to secondary storage
 
 // Address in page table or page directory entry
 #define PTE_ADDR(pte)   ((uint)(pte) & ~0xFFF)

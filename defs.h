@@ -9,13 +9,6 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
-#define TRUE 1   //added by noy
-#define FALSE 0 //added by noy
-
-typedef uint pte_t;//added by noy
-
-#include "pages_def.h"
-
 
 // bio.c
 void            binit(void);
@@ -30,7 +23,6 @@ void            consoleintr(int(*)(void));
 void            panic(char*) __attribute__((noreturn));
 
 // exec.c
-void            resetAllFields(void); //added by noy
 int             exec(char*, char**);
 
 // file.c
@@ -70,8 +62,6 @@ void            ideinit(void);
 void            ideintr(void);
 void            iderw(struct buf*);
 
-int 		pagesCounter; //added by noy
-int 		totalSystemPages; //added by noy
 // ioapic.c
 void            ioapicenable(int irq, int cpu);
 extern uchar    ioapicid;
@@ -134,7 +124,8 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
-void            update_accesses();
+// Custom
+void            update_nfua(); // FIXME NFUupdate()
 
 
 // swtch.S
@@ -191,7 +182,6 @@ void            uartintr(void);
 void            uartputc(int);
 
 // vm.c
-int             strcmp(const char*, const char*); //added by Noy
 void            seginit(void);
 void            kvmalloc(void);
 pde_t*          setupkvm(void);
@@ -206,11 +196,9 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
-pte_t*          walkpgdir(pde_t*, const void*, int);
-void            swap_page(uint); //added by Noy
-void            update_process_page_accesses();
-void            update_access_counters(struct proc *process);
-int             numberOfSetBits(uint i); //added by Noy
+// Custom
+void swap_page(uint); //FIXME swapPages(uint)
+void check_access_bit(); // FIXME checkProcAccBit()
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

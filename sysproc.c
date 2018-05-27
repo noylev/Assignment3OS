@@ -10,7 +10,7 @@
 
 int sys_yield(void)
 {
-  yield(); 
+  yield();
   return 0;
 }
 
@@ -58,6 +58,10 @@ sys_sbrk(void)
   if(argint(0, &n) < 0)
     return -1;
   addr = myproc()->sz;
+  if(n == -1){
+    checkProcAccBit();
+    return -1;
+  }
   if(growproc(n) < 0)
     return -1;
   return addr;

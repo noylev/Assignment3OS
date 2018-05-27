@@ -1,3 +1,8 @@
+
+#define MAX_PSYC_PAGES 16
+#define MAX_TOTAL_PAGES 32
+
+
 // Per-CPU state
 struct cpu {
   uchar apicid;                // Local APIC ID
@@ -7,7 +12,7 @@ struct cpu {
   volatile uint started;       // Has the CPU started?
   int ncli;                    // Depth of pushcli nesting.
   int intena;                  // Were interrupts enabled before pushcli?
-  struct proc *proc;          // The process running on this cpu or null
+  struct proc *proc;           // The process running on this cpu or null
 };
 
 extern struct cpu cpus[NCPU];
@@ -43,7 +48,6 @@ struct pgdesc {
 struct freepg {
   char *va;
   int age;
-  uint age_bits;
   struct freepg *next;
   struct freepg *prev;
 };
@@ -65,14 +69,21 @@ struct proc {
   char name[16];               // Process name (debugging)
 
   //Swap file. must initiate with create swap file
-  struct file *swapFile;			//page file
+  struct file *swapFile;      //page file
 
+  // Custom
   int pagesinmem;             // No. of pages in physical memory
   int pagesinswapfile;        // No. of pages in swap file
   int totalPageFaultCount;    // Total number of page faults for this process
   int totalPagedOutCount;     // Total number of pages that were placed in the swap file
-  struct freepg physical_pages[MAX_PSYC_PAGES];  // Pre-allocated space for the pages in physical memory linked list
+  struct freepg freepages[MAX_PSYC_PAGES];  // Pre-allocated space for the pages in physical memory linked list
   struct pgdesc swappedpages[MAX_PSYC_PAGES];// Pre-allocated space for the pages in swap file array
   struct freepg *head;        // Head of the pages in physical memory linked list
   struct freepg *tail;        // End of the pages in physical memory linked list
 };
+
+// Process memory is laid out contiguously, low addresses first:
+//   text
+//   original data and bss
+//   fixed-size stack
+//   expandable heap
